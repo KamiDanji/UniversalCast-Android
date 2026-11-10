@@ -1,0 +1,6 @@
+-keep class org.java_websocket.** { *; }
+-dontwarn org.java_websocket.**
+-dontwarn org.slf4j.**
+-dontwarn javax.naming.**
+-keep class com.universalcast.** { *; }
+-keep class com.journeyapps.barcodescanner.** { *; }
