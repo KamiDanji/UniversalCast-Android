@@ -1,6 +1,8 @@
 package com.universalcast.sender
 
+import com.universalcast.playback.MediaHeaders
 import com.universalcast.playback.MediaUriValidator
+import com.universalcast.playback.SubtitleValidator
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
 import com.universalcast.security.SenderIdentity
@@ -64,7 +66,7 @@ class SenderController(
     private val clock: () -> Long = System::currentTimeMillis,
     private val connectTimeoutMs: Long = 4_000,
     private val heartbeatMs: Long = 10_000,
-    private val reconnectDelaysMs: List<Long> = listOf(1_000L, 2_000L, 4_000L, 8_000L),
+    private val reconnectDelaysMs: List<Long> = listOf(1_000L, 2_000L, 4_000L, 8_000L, 15_000L, 30_000L, 30_000L, 30_000L), // ~2 min: rides out a Wi-Fi nap in the background
 ) {
     private val worker = ScheduledThreadPoolExecutor(1) { r -> Thread(r, "ucp-sender").also { it.isDaemon = true } }
     private val listeners = CopyOnWriteArrayList<(SenderState) -> Unit>()
@@ -120,21 +122,40 @@ class SenderController(
         worker.shutdown()
     }
 
+    /** Casts [url] (the "Cast a link" field and shared links). */
+    fun load(url: String, title: String? = null, autoplay: Boolean = true) =
+        load(MediaCast(url, title = title, autoplay = autoplay))
+
     /**
-     * Casts [url]. [mimeType] tells the TV the format when the URL doesn't (e.g. HLS without ".m3u8");
-     * [headers] are the request headers the stream needs (see [com.universalcast.playback.MediaHeaders]).
+     * Casts [cast]: optional [MediaCast.mimeType] tells the TV the format when the URL doesn't (HLS without ".m3u8"),
+     * [MediaCast.headers] are the request headers the stream needs and [MediaCast.subtitles] side-loaded text tracks.
+     * Anything the receiver would reject is refused here first, with a user-facing message.
      */
-    fun load(url: String, title: String? = null, autoplay: Boolean = true, mimeType: String? = null, headers: Map<String, String> = emptyMap()) {
+    fun load(cast: MediaCast) {
         val clean = try {
-            MediaUriValidator.validateUri(url.trim())
+            MediaUriValidator.validateUri(cast.uri.trim())
         } catch (e: RuntimeException) { // UcpException or IllegalArgumentException for malformed input
             note("Enter a valid http:// or https:// link.")
             return
         }
-        val payload = linkedMapOf<String, Any?>("uri" to clean, "autoplay" to autoplay)
-        if (!title.isNullOrBlank()) payload["title"] = title.trim().take(200)
-        if (mimeType != null) payload["mimeType"] = mimeType
+        val headers = try {
+            MediaHeaders.validate(cast.headers)
+        } catch (e: IllegalArgumentException) {
+            note("This stream needs request headers the TV doesn't accept.")
+            return
+        }
+        val subtitles = cast.subtitles.map { BrowserCast.toWire(it) }
+        try {
+            SubtitleValidator.validate(subtitles)
+        } catch (e: IllegalArgumentException) {
+            note("The selected subtitles can't be sent to the TV.")
+            return
+        }
+        val payload = linkedMapOf<String, Any?>("uri" to clean, "autoplay" to cast.autoplay)
+        if (!cast.title.isNullOrBlank()) payload["title"] = cast.title.trim().take(200)
+        if (cast.mimeType != null) payload["mimeType"] = cast.mimeType
         if (headers.isNotEmpty()) payload["headers"] = LinkedHashMap<String, Any?>(headers)
+        if (subtitles.isNotEmpty()) payload["subtitles"] = subtitles
         control(Method.MEDIA_LOAD, payload)
     }
 
@@ -181,7 +202,7 @@ class SenderController(
         update {
             it.copy(
                 phase = if (reconnecting) ConnectionPhase.RECONNECTING else ConnectionPhase.CONNECTING,
-                receiver = r, failure = null, message = if (reconnecting) "Connection lost. Reconnecting…" else null,
+                receiver = r, failure = null, message = if (reconnecting) RECONNECTING_MESSAGE else null,
             )
         }
         var pinProblem = false
@@ -190,6 +211,7 @@ class SenderController(
             val c = UcpClient(identity, host, r.port, r.fingerprint)
             try {
                 if (!c.connect(connectTimeoutMs, r.path)) {
+                    System.err.println("UCP connect to $host:${r.port} failed: ${c.lastError?.let { it.javaClass.simpleName + ": " + it.message } ?: "no connection within ${connectTimeoutMs}ms"}")
                     if (generateSequence<Throwable>(c.lastError) { it.cause }.any { it is CertificateException }) pinProblem = true
                     c.close()
                     continue
@@ -198,6 +220,7 @@ class SenderController(
                 attach(c, r, info.role)
                 return
             } catch (e: UcpClientException) {
+                System.err.println("UCP auth with $host:${r.port} failed: ${e.code} ${e.message}")
                 c.close()
                 if (e.code == ErrorCode.AUTH_FAILED) {
                     wantConnected = false
@@ -205,6 +228,7 @@ class SenderController(
                     return
                 }
             } catch (e: Exception) {
+                System.err.println("UCP connect to $host:${r.port} error: ${e.javaClass.simpleName}: ${e.message}")
                 c.close()
             }
         }
@@ -293,10 +317,10 @@ class SenderController(
             fail(FailureKind.UNREACHABLE, "Lost connection to $name.")
             return
         }
-        update { it.copy(phase = ConnectionPhase.RECONNECTING, role = null, hasSession = false, message = "Connection lost. Reconnecting…") }
+        update { it.copy(phase = ConnectionPhase.RECONNECTING, role = null, hasSession = false, message = RECONNECTING_MESSAGE) }
         reconnect = worker.schedule({
             try {
-                if (wantConnected) attemptConnect(attempt, reconnecting = true)
+                if (wantConnected && client == null) attemptConnect(attempt, reconnecting = true)
             } catch (e: Exception) {
                 fail(FailureKind.UNREACHABLE, "Lost connection to $name.")
             }
@@ -340,7 +364,7 @@ class SenderController(
     private fun control(method: String, payload: Map<String, Any?> = emptyMap()) = submit {
         val c = client
         if (c == null || state.phase != ConnectionPhase.CONNECTED) {
-            note("Not connected to a TV.")
+            note(if (state.phase == ConnectionPhase.RECONNECTING) RECONNECTING_MESSAGE else "Not connected to a TV.")
             return@submit
         }
         if (state.role != "CONTROLLER") {
@@ -358,8 +382,21 @@ class SenderController(
                 note(describe(r.error?.code, r.error?.message))
             }
         } catch (e: UcpClientException) {
-            note(describe(e.code, e.message))
+            if (e.connectionLost) connectionLost(c) else note(describe(e.code, e.message))
         }
+    }
+
+    /**
+     * The socket of [c] turned out to be closed while commands were still queued on this worker. The asynchronous
+     * close notification is queued *behind* those commands, so handle the loss right here: every later queued
+     * command then sees the reconnecting state instead of hitting the dead socket, and the stale notification is
+     * ignored (generation check).
+     */
+    private fun connectionLost(c: UcpClient) {
+        if (c !== client) return
+        onClosed(generation, c.closeCode ?: CLOSE_ABNORMAL)
+        c.onClosed = null
+        c.close()
     }
 
     private fun withSession(c: UcpClient, method: String, payload: Map<String, Any?>): Envelope {
@@ -377,6 +414,12 @@ class SenderController(
         sessionId = id
         update { it.copy(hasSession = true) }
         return id
+    }
+
+    private companion object {
+        const val RECONNECTING_MESSAGE = "Connection lost. Reconnecting…"
+        /** RFC 6455 "abnormal closure" (no close frame), used when the socket died without telling us why. */
+        const val CLOSE_ABNORMAL = 1006
     }
 
     private fun describe(code: ErrorCode?, message: String?): String = when (code) {

@@ -75,8 +75,24 @@ class ReceiverCore(
         if (isRunning) return
         ConfigValidator.requireValid(config)
         val ctx = identity.createServerSslContext()
-        val srv = UcpServer(InetSocketAddress(config.port), ctx, handler, log)
-        srv.startAndWait(5_000)
+        // The port is advertised via mDNS, so a busy default port (a stale instance, another app) just means the next free one.
+        var srv: UcpServer? = null
+        var lastError: Exception? = null
+        val candidates = if (config.port == 0) listOf(0) else (config.port..minOf(config.port + 9, 65535)).toList()
+        for (p in candidates) {
+            val s = UcpServer(InetSocketAddress(p), ctx, handler, log)
+            try {
+                s.startAndWait(5_000)
+                srv = s
+                if (p != config.port) log.warn("Port ${config.port} is in use; listening on $p instead")
+                break
+            } catch (e: IllegalStateException) {
+                s.stopQuietly()
+                lastError = e
+                if (e.cause !is java.net.BindException) throw e
+            }
+        }
+        if (srv == null) throw lastError ?: IllegalStateException("Receiver server failed to start")
         server = srv
         boundPort = srv.port
         handler.attach()

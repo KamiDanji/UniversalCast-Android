@@ -20,6 +20,7 @@ import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.receiver.platform.KeystoreIdentityProvider
 import com.universalcast.receiver.platform.Media3PlaybackEngine
 import com.universalcast.receiver.platform.NsdAdvertiser
+import com.universalcast.receiver.policy.CastStartDetector
 import com.universalcast.security.ReceiverIdentity
 import com.universalcast.storage.EncryptedFileSenderRegistry
 import com.universalcast.storage.LoadOutcome
@@ -31,7 +32,8 @@ import java.io.File
 /** Process-wide holder of the receiver and the observable state the UI renders. */
 class ReceiverRuntime(private val app: Context) {
     val log = DiagnosticsLog()
-    private val prefs = app.getSharedPreferences("ucp_settings", Context.MODE_PRIVATE)
+    private val prefs = app.getSharedPreferences(ReceiverSettings.FILE, Context.MODE_PRIVATE)
+    val settings = ReceiverSettings(app)
     private val main = Handler(Looper.getMainLooper())
 
     private val provider = KeystoreIdentityProvider()
@@ -65,6 +67,15 @@ class ReceiverRuntime(private val app: Context) {
     private val _name = MutableStateFlow(readName())
     val receiverName: StateFlow<String> = _name.asStateFlow()
 
+    private val castDetector = CastStartDetector()
+
+    /**
+     * Invoked (on the playback-events thread) when a phone starts casting: IDLE → playing/loading with a media URI,
+     * or a new URI over a running playback. The foreground service uses it to bring the player to the front.
+     */
+    @Volatile
+    var onCastStarted: (() -> Unit)? = null
+
     init {
         if (identityResult.regenerated) log.warn("Receiver identity key was (re)generated; previous pairings are void")
         registry = EncryptedFileSenderRegistry(File(app.filesDir, "senders.bin"), provider.storeAead(), identity.fingerprint)
@@ -90,7 +101,10 @@ class ReceiverRuntime(private val app: Context) {
             }
         })
         core.addConnectionsListener { list -> _connected.value = list; refreshSenders() }
-        engine.addListener { snap -> _playback.value = snap }
+        engine.addListener { snap ->
+            _playback.value = snap
+            if (castDetector.onSnapshot(snap)) runCatching { onCastStarted?.invoke() }.onFailure { log.warn("Auto-open failed: ${it.javaClass.simpleName}") }
+        }
         refreshSenders()
         scheduleTick()
     }

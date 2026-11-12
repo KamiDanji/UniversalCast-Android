@@ -24,24 +24,48 @@
   lazy session creation, commands, event-driven state, heartbeat, reconnect with backoff, failure classification
   (unreachable / rejected / pin mismatch).
 - `sender.EncryptedFileReceiverStore` – persistence of paired TVs.
-- `sender.MediaSniffer` – recognises stream URLs (HLS/DASH/progressive, ignoring segments), confirms them by content
-  (`#EXTM3U`, `<MPD`, Content-Type) and parses HLS master playlists (qualities) and media playlists (duration).
+- `sender.MediaSniffer` / `sender.CandidateList` – pure URL classification (HLS / DASH / progressive / audio /
+  subtitle / ignore: segments, keys, images…), subtitle language guessing, and the thread-safe, deduplicated, ranked
+  (HLS master > HLS > DASH > progressive > audio, newest first) candidate list of a page that hides variant playlists
+  of a known master.
+- `sender.StreamProbe` / `sender.HlsParser` – `HttpURLConnection` probe (≤ 256 KiB, 5 s, manual redirects with
+  host-scoped Cookie) that classifies by content: HLS master/media/live/duration/subtitle renditions, DASH, HTML page,
+  progressive; detects DRM.
+- `sender.CastHeaders`, `sender.BrowserCast`, `sender.PageScan`, `sender.MediaCast` – the headers a page's player would
+  send, the `media.load` built from a candidate, the DOM "Scan page" script and its parser.
+  `SenderController.load(MediaCast)` validates headers/subtitles with the receiver's own rules before sending.
 
-Cast browser (`sender-app/.../web`): `BrowserScreen` is a hardened WebView. `shouldInterceptRequest` (plus a
-service-worker client) shows it every request the page and its iframes make. Hits go to `MediaCandidates`, which
-probes each one in the background (`StreamProbe`, using the page's headers), hides HLS variant playlists covered
-by a master, drops non-media, and ranks the rest by duration/size. Casting sends
-`media.load {uri, mimeType, title, headers}`. The receiver (`Media3PlaybackEngine`) builds a per-item
-`DefaultHttpDataSource` with those headers, so they apply to playlists, segments and AES keys.
+Cast browser (`sender-app/.../web/BrowserScreen.kt`): a hardened WebView. `shouldInterceptRequest` (plus a
+service-worker client) sees every request of every frame and feeds `CandidateList`; "Scan page" adds what the DOM
+shows. The candidates sheet probes lazily, shows quality/duration/live/DRM, lets the user pick subtitles and casts to
+the connected TV (or the only paired TV, or a chosen one). After casting, the page's media is paused and the remote is
+drawn as an overlay above the still-composed browser.
+
+Receiver side (`Media3PlaybackEngine`): one ExoPlayer with `DefaultMediaSourceFactory(DefaultDataSource(
+ResolvingDataSource(OkHttpDataSource)))`. The resolver adds the current item's headers per request (Cookie only to the
+media host); an OkHttp network interceptor strips Cookie on every other hop, including redirects. Subtitles are
+`MediaItem.SubtitleConfiguration`s loaded through the same stack; English is the preferred text language.
+
+## TV app lifecycle
+- `ReceiverService` is a `connectedDevice` foreground service (allowed from BOOT_COMPLETED on Android 15, unlike
+  `mediaPlayback`). Start failures are logged, never thrown.
+- `BootReceiver` (BOOT_COMPLETED, QUICKBOOT_POWERON, MY_PACKAGE_REPLACED) → `shouldAutostart()` → service.
+- Auto-open: `ReceiverRuntime` detects a cast start (`CastStartDetector`), the service asks `AutoLaunchPolicy`
+  (setting, activity resumed, 2 s debounce, overlay permission on API 29+) and starts `MainActivity`
+  (`EXTRA_FROM_CAST`). `OverlayAnchor` keeps a 1×1 overlay window while the permission is granted (Android 15 needs a
+  visible one). When a cast-opened playback ends, the activity moves its task to the back.
+- `PlayerScreen`: video + subtitles, a spinner while loading/buffering, an error message; nothing focusable.
+  Back stops playback; media keys toggle play/pause (`ALLOW_REMOTE_MEDIA_KEYS`); D-pad does nothing; immersive mode.
 
 ## Request pipeline (UcpProtocolHandler)
 size → strict decode → duplicate-id cache → sequence → connection phase → permission → payload validation → execute.
 Responses allocate their sequence number after routing so events emitted during a request order correctly.
 
 ## Threading
-Server threads handle protocol; ExoPlayer is touched only on the main thread through a synchronous `onMain` bridge;
+Server threads handle protocol (`UcpServer` also runs a 100 ms write watchdog that works around a lost-wakeup race in
+Java-WebSocket 1.6.0's NIO write path); ExoPlayer is touched only on the main thread through a synchronous `onMain` bridge;
 engine events are re-dispatched on a dedicated executor to avoid main/network lock inversion.
 
 ## Extension points
-`PlaybackEngine` (new playback backends), `Capabilities.playbackMethods` (browser casting would add a method and
-its own permission), `Method`/`Permissions.requiredFor` (new protocol methods), `ServiceAdvertiser`.
+`PlaybackEngine` (new playback backends), `Capabilities.features`/`playbackMethods` (browser casting added the
+`media-headers` and `subtitles` features; the method is still `direct-url`), `Method`/`Permissions.requiredFor` (new protocol methods), `ServiceAdvertiser`.

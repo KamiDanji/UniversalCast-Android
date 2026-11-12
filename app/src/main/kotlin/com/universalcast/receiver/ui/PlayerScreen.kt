@@ -1,87 +1,124 @@
 package com.universalcast.receiver.ui
 
+import android.view.KeyEvent
 import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.ui.PlayerView
+import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
 import com.universalcast.receiver.platform.Media3PlaybackEngine
-import kotlinx.coroutines.delay
 
+/**
+ * Physical remote media keys (MEDIA_PLAY_PAUSE / MEDIA_PLAY / MEDIA_PAUSE) toggle playback silently.
+ * ASSUMPTION: the phone is the only real remote, but a TV owner reaching for the remote's play/pause key expects it to
+ * work. Set to false to make the TV ignore those keys completely (Back still stops playback).
+ */
+const val ALLOW_REMOTE_MEDIA_KEYS = true
+
+/**
+ * The TV side of playback: video, subtitles, a small spinner while loading/buffering, and an error message when
+ * playback fails. Nothing else — no title, seek bar, buttons or status text — and nothing focusable; everything is
+ * controlled from the phone. Back (handled by the activity) stops playback and returns Home.
+ */
 @Composable
-fun PlayerScreen(engine: Media3PlaybackEngine, snapshot: com.universalcast.playback.PlaybackSnapshot, onStop: () -> Unit) {
+fun PlayerScreen(engine: Media3PlaybackEngine, snapshot: PlaybackSnapshot) {
     val view = LocalView.current
     DisposableEffect(Unit) {
-        view.keepScreenOn = true // screen must not sleep during playback
+        view.keepScreenOn = true // the screen must not sleep during playback
         onDispose { view.keepScreenOn = false }
     }
-    var overlayVisible by remember { mutableStateOf(true) }
-    var lastInteraction by remember { mutableStateOf(System.currentTimeMillis()) }
-    var livePosition by remember { mutableStateOf(0L) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            livePosition = engine.player.currentPosition
-            if (System.currentTimeMillis() - lastInteraction > 5000 && snapshot.isPlaying) overlayVisible = false
-            delay(500)
-        }
-    }
-    fun touch() { lastInteraction = System.currentTimeMillis(); overlayVisible = true }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
-            factory = { ctx -> PlayerView(ctx).apply { useController = false; layoutParams = ViewGroup.LayoutParams(-1, -1); player = engine.player } },
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    useController = false          // no on-screen transport UI at all
+                    isFocusable = false
+                    isFocusableInTouchMode = false
+                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER) // our own spinner below
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                    player = engine.player
+                    // PlayerView's SubtitleView is part of the view itself (above the video surface); with the
+                    // controller disabled nothing covers it, and our Compose overlays stay centred and small.
+                    subtitleView?.apply { setUserDefaultStyle(); setUserDefaultTextSize() }
+                }
+            },
             update = { it.player = engine.player },
             modifier = Modifier.fillMaxSize(),
         )
-        val busy = snapshot.status == PlaybackStatus.LOADING || snapshot.status == PlaybackStatus.BUFFERING
-        if (busy) Text("Buffering…", color = Palette.Text, style = MaterialTheme.typography.titleLarge,
-            modifier = Modifier.align(Alignment.Center).background(Color(0x99000000)).padding(20.dp))
+
+        val busy = snapshot.error == null &&
+            (snapshot.status == PlaybackStatus.LOADING || snapshot.status == PlaybackStatus.BUFFERING)
+        if (busy) {
+            CircularProgressIndicator(
+                color = Palette.Text.copy(alpha = 0.85f),
+                strokeWidth = 4.dp,
+                modifier = Modifier.align(Alignment.Center).size(56.dp),
+            )
+        }
+
         snapshot.error?.let { e ->
-            Column(Modifier.align(Alignment.Center).background(Color(0xCC000000)).padding(28.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Playback problem", color = Palette.Danger, style = MaterialTheme.typography.titleLarge)
-                Text(e.message, color = Palette.Text, style = MaterialTheme.typography.bodyLarge)
-                Text("The sender can try again. Press Back to leave.", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
-            }
-        }
-        if (overlayVisible || snapshot.status == PlaybackStatus.PAUSED || snapshot.error != null) {
             Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000))))
-                    .padding(horizontal = 56.dp, vertical = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                Modifier.align(Alignment.Center).widthIn(max = 760.dp)
+                    .background(Color(0xCC000000), RoundedCornerShape(16.dp)).padding(28.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(snapshot.title ?: snapshot.mediaUri.orEmpty(), color = Palette.Text, style = MaterialTheme.typography.titleLarge, maxLines = 1)
-                val dur = snapshot.durationMs
-                val pos = livePosition
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text(formatTime(pos), color = Palette.Text, style = MaterialTheme.typography.bodyLarge)
-                    Box(Modifier.weight(1f).height(8.dp).background(Palette.SurfaceHigh)) {
-                        val f = if (dur != null && dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
-                        val b = if (dur != null && dur > 0) (snapshot.bufferedPositionMs.toFloat() / dur).coerceIn(0f, 1f) else 0f
-                        Box(Modifier.fillMaxHeight().fillMaxWidth(b).background(Palette.TextDim.copy(alpha = 0.4f)))
-                        Box(Modifier.fillMaxHeight().fillMaxWidth(f).background(Palette.Accent))
-                    }
-                    Text(if (dur == null) "LIVE" else formatTime(dur), color = Palette.Text, style = MaterialTheme.typography.bodyLarge)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TvButton("−10 s", { touch(); engine.seekTo((engine.player.currentPosition - 10_000).coerceAtLeast(0)) }, primary = false)
-                    TvButton(if (snapshot.isPlaying) "Pause" else "Play", { touch(); if (snapshot.isPlaying) engine.pause() else engine.play() })
-                    TvButton("+10 s", { touch(); engine.seekTo(engine.player.currentPosition + 10_000) }, primary = false)
-                    TvButton("Stop", { onStop() }, danger = true)
-                    Spacer(Modifier.weight(1f))
-                    Text("${snapshot.status.name.lowercase()} · ${"%.2f".format(snapshot.speed)}×", color = Palette.TextDim, style = MaterialTheme.typography.bodyLarge)
-                }
+                Text("Playback problem", color = Palette.Danger, style = MaterialTheme.typography.titleLarge)
+                Text(e.message, color = Palette.Text, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+                Text("Try again from your phone, or press Back to leave.", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
             }
         }
+    }
+}
+
+/**
+ * Remote-key policy while the player is shown. Returns true if the key was consumed.
+ * D-pad and every other key are swallowed (they would otherwise move focus to nothing or leak to the home UI);
+ * Back is NOT handled here, the activity's BackHandler stops playback.
+ */
+fun handlePlayerKey(event: KeyEvent, snapshot: PlaybackSnapshot, engine: Media3PlaybackEngine): Boolean {
+    val code = event.keyCode
+    if (code == KeyEvent.KEYCODE_BACK) return false
+    // Volume / mute keys belong to the TV (system volume), never to us.
+    if (code == KeyEvent.KEYCODE_VOLUME_UP || code == KeyEvent.KEYCODE_VOLUME_DOWN || code == KeyEvent.KEYCODE_VOLUME_MUTE) return false
+    // Power, home and other system keys are never delivered to apps anyway; returning false keeps it that way.
+    if (code == KeyEvent.KEYCODE_HOME || code == KeyEvent.KEYCODE_POWER) return false
+    val media = code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || code == KeyEvent.KEYCODE_MEDIA_PLAY || code == KeyEvent.KEYCODE_MEDIA_PAUSE
+    if (media) {
+        if (ALLOW_REMOTE_MEDIA_KEYS && event.action == KeyEvent.ACTION_UP) {
+            when (PlayerKeyPolicy.action(code, snapshot.isPlaying)) {
+                PlayerKeyPolicy.Action.PLAY -> runCatching { engine.play() }
+                PlayerKeyPolicy.Action.PAUSE -> runCatching { engine.pause() }
+                PlayerKeyPolicy.Action.NONE -> {}
+            }
+        }
+        return true
+    }
+    return true // D-pad, OK/center, numbers, …: do nothing
+}
+
+/** Pure mapping of a media key to an action, testable on the JVM. */
+object PlayerKeyPolicy {
+    enum class Action { PLAY, PAUSE, NONE }
+
+    fun action(keyCode: Int, isPlaying: Boolean): Action = when (keyCode) {
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> if (isPlaying) Action.PAUSE else Action.PLAY
+        KeyEvent.KEYCODE_MEDIA_PLAY -> if (isPlaying) Action.NONE else Action.PLAY
+        KeyEvent.KEYCODE_MEDIA_PAUSE -> if (isPlaying) Action.PAUSE else Action.NONE
+        else -> Action.NONE
     }
 }

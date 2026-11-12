@@ -27,6 +27,9 @@ dependencies {
 
 tasks.test {
     useJUnit()
+    // The JDK's HttpURLConnection silently drops "restricted" headers such as Origin; Android's does not. StreamProbe
+    // runs on Android, so let the JVM tests see the same behaviour.
+    systemProperty("sun.net.http.allowRestrictedHeaders", "true")
     testLogging {
         events("passed", "failed", "skipped")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

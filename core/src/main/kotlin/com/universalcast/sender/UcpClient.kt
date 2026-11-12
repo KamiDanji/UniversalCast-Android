@@ -31,7 +31,11 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicLong
 
-class UcpClientException(val code: ErrorCode?, message: String) : Exception(message)
+/**
+ * A request failed. [code] is the receiver's error code, if it answered. [connectionLost] is true when the socket is
+ * (or just became) unusable, so the caller can treat it as a disconnect rather than as a refused request.
+ */
+class UcpClientException(val code: ErrorCode?, message: String, val connectionLost: Boolean = false) : Exception(message)
 
 /**
  * Reference sender-side UCP client (also used by the test-suite). It pins the receiver's TLS key to the
@@ -48,6 +52,7 @@ class UcpClient(
     private val seq = AtomicLong(0)
     private val pending = ConcurrentHashMap<String, CompletableFuture<Envelope>>()
     val events = LinkedBlockingQueue<Envelope>()
+    /** The most recent [RAW_HISTORY] inbound messages (diagnostics/tests); bounded so a long session can't grow it. */
     val rawMessages = CopyOnWriteArrayList<String>()
 
     @Volatile var closeCode: Int? = null
@@ -71,6 +76,7 @@ class UcpClient(
             override fun onOpen(handshakedata: ServerHandshake?) {}
             override fun onMessage(message: String) {
                 rawMessages.add(message)
+                while (rawMessages.size > RAW_HISTORY) rawMessages.removeAt(0)
                 val env = try {
                     EnvelopeCodec.decode(message)
                 } catch (e: Exception) {
@@ -85,7 +91,7 @@ class UcpClient(
 
             override fun onClose(code: Int, reason: String?, remote: Boolean) {
                 closeCode = code
-                pending.values.forEach { it.completeExceptionally(UcpClientException(null, "Connection closed ($code)")) }
+                pending.values.forEach { it.completeExceptionally(UcpClientException(null, "Connection closed ($code)", connectionLost = true)) }
                 try {
                     onClosed?.invoke(code)
                 } catch (e: Exception) {
@@ -139,8 +145,16 @@ class UcpClient(
         val seqNo = seqOverride ?: nextSeq()
         val rid = id ?: "c$seqNo-${Bytes.b64(SecureRandoms.bytes(4))}"
         val fut = CompletableFuture<Envelope>()
+        val socket = ws
+        if (socket == null || !socket.isOpen) throw UcpClientException(null, "Not connected", connectionLost = true)
         pending[rid] = fut
-        ws!!.send(EnvelopeCodec.encode(Envelope.request(rid, seqNo, method, payload, session)))
+        try {
+            socket.send(EnvelopeCodec.encode(Envelope.request(rid, seqNo, method, payload, session)))
+        } catch (e: org.java_websocket.exceptions.WebsocketNotConnectedException) {
+            // Closed between the check and the send: a disconnect, not a programming error.
+            pending.remove(rid)
+            throw UcpClientException(null, "Not connected", connectionLost = true)
+        }
         try {
             return fut.get(timeoutMs, TimeUnit.MILLISECONDS)
         } catch (e: TimeoutException) {
@@ -196,6 +210,10 @@ class UcpClient(
         )
         if (!EcKeys.verify(spki, expected, proof)) throw UcpClientException(null, "Receiver proof is invalid")
         return AuthInfo(r.string("role", 16))
+    }
+
+    companion object {
+        const val RAW_HISTORY = 256
     }
 
     fun snapshot(): PlaybackSnapshot =

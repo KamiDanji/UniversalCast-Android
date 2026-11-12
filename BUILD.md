@@ -52,9 +52,6 @@ adb -s <phone-serial> reverse tcp:8765 tcp:8765  # phone:8765  -> laptop:8765
 
 On a real TV on the same Wi-Fi none of this is needed. Release builds advertise only the real LAN addresses.
 
-I can't edit files from this side question, so here's a section you can paste into `BUILD.md`, or ask in the main conversation and it can be added there. One path isn't confirmed: the TV debug APK was only ever installed through a wildcard (`*.apk`), so `app-debug.apk` is the standard Gradle name rather than one I saw.
-
-````markdown
 ## Building everything
 
 ```sh
@@ -97,8 +94,28 @@ adb -s <phone-serial> install -r sender-app/build/outputs/apk/debug/sender-app-d
 **Testing live:** put the phone and the TV on the same Wi-Fi. No `adb forward`/`reverse` is needed (that's only for
 the emulator). Open UniversalCast on the TV → "Pair a new device" → scan the QR code with the phone → compare
 the codes → approve on the TV. The receiver listens on port 8765.
-````
 
 Two notes for your real TV:
 - **The QR code also lists `127.0.0.1`:** the debug receiver adds it for emulator testing. On a real TV the phone fails on that address instantly and moves on to the TV's Wi-Fi address, so it's harmless.
 - **Phones paired with the emulator need to pair again:** the physical TV has its own security key, so it's a separate pairing.
+
+## TV: start on boot and open automatically when a phone casts
+
+- **Start when the TV turns on** (Settings on the TV, default on). Open the app **once** after installing: Android
+  keeps a newly installed app in the "stopped" state and delivers no boot broadcast to it until it has been opened.
+  A TV in deep standby suspends all apps; the receiver comes back when the TV fully wakes or reboots.
+  Test without rebooting: `adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p com.universalcast.receiver.debug`
+  (Android 15 restriction check: `adb shell am compat enable FGS_BOOT_COMPLETED_RESTRICTIONS com.universalcast.receiver.debug`).
+- **Open automatically when a phone casts** needs "Display over other apps" on Android 10+. Settings on the TV shows
+  the status and a button to the system screen when the TV has one. Many TVs don't; then run once:
+  ```sh
+  adb shell appops set com.universalcast.receiver.debug SYSTEM_ALERT_WINDOW allow   # release build: com.universalcast.receiver
+  ```
+
+## Running the tests
+
+```sh
+./gradlew :core:test :app:testDebugUnitTest :sender-app:testDebugUnitTest
+```
+`:app:connectedDebugAndroidTest` / `:sender-app:connectedDebugAndroidTest` (Keystore tests) need a connected device.
+

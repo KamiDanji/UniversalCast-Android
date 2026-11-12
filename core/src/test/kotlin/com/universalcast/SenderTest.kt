@@ -200,6 +200,88 @@ class SenderTest {
         } finally { c.shutdown() }
     }
 
+    /**
+     * Regression for the flaky heartbeat test: when the connection drops while commands are still queued on the
+     * worker, those commands must not hit the dead socket and surface "Unexpected error: WebsocketNotConnectedException".
+     * The loss is handled at once (RECONNECTING), and the controller reconnects.
+     */
+    @Test fun commandsQueuedWhenTheConnectionDropsDoNotSurfaceTransportErrors() = withEnv { env ->
+        val id = SoftwareSenderIdentity.generate(); val r = pair(env, id, Role.CONTROLLER)
+        val c = controller(id)
+        try {
+            val messages = java.util.concurrent.CopyOnWriteArrayList<String>()
+            c.addListener { s -> s.message?.let { messages.add(it) } }
+            c.connect(r); c.awaitPhase(ConnectionPhase.CONNECTED)
+            c.load(url); waitFor { c.state.snapshot.status == PlaybackStatus.PLAYING }
+            repeat(5) { round ->
+                repeat(40) { c.seek(1_000L * it) } // queued on the worker faster than they can be sent
+                env.core.handler.closeAll(Ucp.CLOSE_SHUTDOWN, "drop $round")
+                waitFor(10_000, "reconnected after drop $round (now ${c.state.phase}: ${c.state.message})") {
+                    c.state.phase == ConnectionPhase.CONNECTED && env.core.connectedSenders().isNotEmpty()
+                }
+            }
+            assertTrue(messages.none { it.startsWith("Unexpected error") }, messages.distinct().toString())
+            c.load(url); waitFor { c.state.snapshot.status == PlaybackStatus.PLAYING }
+            assertNull(c.state.message)
+        } finally { c.shutdown() }
+    }
+
+    // ---- browser casting end to end ---------------------------------------------------------------------
+
+    @Test fun browserCastReachesTheTvWithExactlyTheValidatedHeadersAndSubtitles() = withEnv { env ->
+        val id = SoftwareSenderIdentity.generate(); val r = pair(env, id, Role.CONTROLLER)
+        val c = controller(id)
+        try {
+            c.connect(r); c.awaitPhase(ConnectionPhase.CONNECTED)
+            // What the browser saw: a master playlist requested by a cross-origin player iframe, plus an English VTT.
+            val list = CandidateList()
+            val stream = "https://cdn.example/ep1/master.m3u8?token=abc"
+            val headers = CastHeaders.forwardable(
+                stream, mapOf("Referer" to "https://player.example/embed/1", "Accept-Language" to "en-US"),
+                pageUrl = "https://site.example/watch/1", userAgent = "Mozilla/5.0 (Linux; Android 14; wv)",
+            )
+            list.offer(stream, headers, "https://site.example/watch/1", "Episode 1 – Romance Dawn")
+            list.offer("https://cdn.example/ep1/subs/ep1_en.vtt", headers, null, null)
+            list.offer("https://cdn.example/ep1/seg-1.ts", headers, null, null)
+            val cast = BrowserCast.build(list.streams().single(), list.subtitles(), null, cookie = "cf_clearance=s3cr3t")
+            c.load(cast)
+            waitFor(what = "loaded") { env.engine.lastItem != null }
+            val item = env.engine.lastItem!!
+            assertEquals(stream, item.uri)
+            assertEquals("application/x-mpegURL", item.mimeType)
+            assertEquals("Episode 1 – Romance Dawn", item.title)
+            assertEquals(
+                mapOf(
+                    "Referer" to "https://player.example/embed/1", "Origin" to "https://player.example",
+                    "User-Agent" to "Mozilla/5.0 (Linux; Android 14; wv)", "Accept-Language" to "en-US", "Cookie" to "cf_clearance=s3cr3t",
+                ),
+                item.headers,
+            )
+            assertEquals(listOf(com.universalcast.playback.SubtitleInfo("https://cdn.example/ep1/subs/ep1_en.vtt", "text/vtt", "en", null)), item.subtitles)
+            waitFor { c.state.snapshot.status == PlaybackStatus.PLAYING }
+            assertNull(c.state.message)
+            assertFalse(c.state.snapshot.toJson().toString().contains("s3cr3t"))
+
+            // The old API still works and sends no extensions.
+            c.load("https://example.org/plain.mp4", "Plain")
+            waitFor { env.engine.lastItem?.uri == "https://example.org/plain.mp4" }
+            assertEquals(com.universalcast.playback.MediaItemInfo("https://example.org/plain.mp4", null, "Plain"), env.engine.lastItem)
+        } finally { c.shutdown() }
+    }
+
+    @Test fun invalidBrowserCastsAreRefusedOnThePhone() = withEnv { env ->
+        val id = SoftwareSenderIdentity.generate(); val r = pair(env, id, Role.CONTROLLER)
+        val c = controller(id)
+        try {
+            c.connect(r); c.awaitPhase(ConnectionPhase.CONNECTED)
+            c.load(MediaCast("https://cdn.example/a.m3u8", headers = mapOf("Host" to "evil")))
+            waitFor { c.state.message?.contains("headers") == true }
+            c.load(MediaCast("https://cdn.example/a.m3u8", subtitles = List(9) { com.universalcast.playback.SubtitleInfo("https://cdn.example/$it.vtt", "text/vtt") }))
+            waitFor { c.state.message?.contains("subtitles") == true }
+            assertTrue(env.engine.calls.isEmpty())
+        } finally { c.shutdown() }
+    }
+
     // ---- failures -----------------------------------------------------------------------------------------
 
     @Test fun revokedPhoneIsToldSoAndDoesNotReconnect() = withEnv { env ->

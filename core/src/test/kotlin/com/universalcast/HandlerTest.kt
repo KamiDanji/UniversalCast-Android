@@ -369,4 +369,138 @@ class HandlerTest {
         val extra = Peer(null)
         assertEquals(Ucp.CLOSE_TRY_LATER, extra.conn.closeCode)
     }
+
+    // ---- media.load extensions: headers + subtitles (UCP 1.0, backward compatible) ---------------------------
+
+    private fun loadWith(p: Peer, extra: Map<String, Any?>) =
+        p.call(Method.MEDIA_LOAD, linkedMapOf<String, Any?>("uri" to "https://cdn.example/ep1/master.m3u8").apply { putAll(extra) })
+
+    @Test fun headerValidationTable() {
+        val p = paired().startSession()
+        val rejected = listOf<Pair<String, Map<String, Any?>>>(
+            "not allowlisted" to mapOf("X-Forwarded-For" to "1.2.3.4"),
+            "Host" to mapOf("Host" to "evil.example"),
+            "Authorization" to mapOf("Authorization" to "Bearer x"),
+            "Range" to mapOf("Range" to "bytes=0-"),
+            "empty name" to mapOf("" to "x"),
+            "too many entries" to mapOf("Referer" to "https://a/", "Origin" to "https://a", "User-Agent" to "UA", "Cookie" to "a=b", "Accept-Language" to "en", "X" to "y"),
+            "duplicate (case-insensitive)" to mapOf("cookie" to "a=1", "COOKIE" to "a=2"),
+            "duplicate referer" to mapOf("referer" to "https://a/", "Referer" to "https://b/"),
+            "value too long" to mapOf("User-Agent" to "u".repeat(4097)),
+            "empty value" to mapOf("Accept-Language" to ""),
+            "CR/LF injection" to mapOf("Referer" to "https://a/\r\nX-Injected: 1"),
+            "LF only" to mapOf("Cookie" to "a=b\nX: y"),
+            "control char" to mapOf("User-Agent" to "UA\u0007"),
+            "tab" to mapOf("User-Agent" to "UA\tx"),
+            "DEL" to mapOf("Cookie" to "a=\u007f"),
+            "non-ASCII" to mapOf("User-Agent" to "Ünïcode"),
+            "non-string value" to mapOf("Cookie" to 5L),
+            "null-ish object value" to mapOf("Cookie" to mapOf("a" to "b")),
+            "javascript referer" to mapOf("Referer" to "javascript:alert(1)"),
+            "file origin" to mapOf("Origin" to "file:///etc"),
+            "total over 8192 bytes" to mapOf("Cookie" to "c".repeat(4096), "User-Agent" to "u".repeat(4096), "Referer" to "https://a/" + "r".repeat(100)),
+        )
+        for ((why, h) in rejected) assertEquals(ErrorCode.INVALID_PAYLOAD, loadWith(p, mapOf("headers" to h)).code(), why)
+        assertEquals(ErrorCode.INVALID_PAYLOAD, loadWith(p, mapOf("headers" to "Referer: x")).code(), "headers must be an object")
+        assertTrue(engine.calls.isEmpty(), "nothing invalid may reach the player")
+
+        // Boundaries that are accepted.
+        val max = mapOf("Cookie" to "c".repeat(4096), "User-Agent" to "u".repeat(4096 - 30))
+        assertEquals(true, loadWith(p, mapOf("headers" to max)).ok, "exactly within 8192 bytes")
+        val five = mapOf("referer" to "https://site.example/watch", "origin" to "https://site.example", "user-agent" to "UA/1 (x)",
+            "cookie" to "sid=abc; theme=dark", "accept-language" to "en-US,en;q=0.9")
+        assertEquals(true, loadWith(p, mapOf("headers" to five)).ok)
+        assertEquals(
+            mapOf("Referer" to "https://site.example/watch", "Origin" to "https://site.example", "User-Agent" to "UA/1 (x)",
+                "Cookie" to "sid=abc; theme=dark", "Accept-Language" to "en-US,en;q=0.9"),
+            engine.lastItem!!.headers, "names are normalised to their canonical spelling",
+        )
+        assertEquals(true, loadWith(p, mapOf("headers" to emptyMap<String, Any?>())).ok, "empty object is fine")
+    }
+
+    @Test fun subtitleValidationTable() {
+        val p = paired().startSession()
+        fun sub(vararg kv: Pair<String, Any?>) = linkedMapOf<String, Any?>("uri" to "https://cdn.example/ep1_en.vtt", "mimeType" to "text/vtt").apply { kv.forEach { put(it.first, it.second) } }
+        val rejected = listOf<Pair<String, Any?>>(
+            "not an array" to sub(),
+            "string item" to listOf("https://cdn.example/a.vtt"),
+            "too many" to List(9) { sub() },
+            "missing uri" to listOf(sub().apply { remove("uri") }),
+            "missing mimeType" to listOf(sub().apply { remove("mimeType") }),
+            "file uri" to listOf(sub("uri" to "file:///sdcard/a.vtt")),
+            "javascript uri" to listOf(sub("uri" to "javascript:alert(1)")),
+            "uri too long" to listOf(sub("uri" to "https://cdn.example/" + "a".repeat(2048))),
+            "unsupported mime" to listOf(sub("mimeType" to "text/html")),
+            "mime case trick" to listOf(sub("mimeType" to "TEXT/VTT ")),
+            "language too long" to listOf(sub("language" to "e".repeat(17))),
+            "language with spaces" to listOf(sub("language" to "en US")),
+            "language not a string" to listOf(sub("language" to 1L)),
+            "label too long" to listOf(sub("label" to "l".repeat(65))),
+            "label control char" to listOf(sub("label" to "English\n")),
+            "unknown field" to listOf(sub("headers" to mapOf("Cookie" to "x"))),
+        )
+        for ((why, s) in rejected) assertEquals(ErrorCode.INVALID_PAYLOAD, loadWith(p, mapOf("subtitles" to s)).code(), why)
+        assertTrue(engine.calls.isEmpty())
+
+        val ok = listOf(
+            sub("language" to "en", "label" to "English"),
+            sub("uri" to "http://cdn.example/ep1.pt-BR.srt", "mimeType" to "application/x-subrip", "language" to "pt-BR"),
+            sub("uri" to "https://cdn.example/a.ass", "mimeType" to "text/x-ssa"),
+            sub("uri" to "https://cdn.example/a.ttml", "mimeType" to "application/ttml+xml", "label" to "l".repeat(64)),
+        ) + List(4) { i -> sub("uri" to "https://cdn.example/x$i.vtt") }
+        assertEquals(true, loadWith(p, mapOf("subtitles" to ok)).ok, "8 tracks, all formats")
+        val got = engine.lastItem!!.subtitles
+        assertEquals(8, got.size)
+        assertEquals(com.universalcast.playback.SubtitleInfo("https://cdn.example/ep1_en.vtt", "text/vtt", "en", "English"), got[0])
+        assertEquals("application/x-subrip", got[1].mimeType)
+        assertEquals(true, loadWith(p, mapOf("subtitles" to emptyList<Any>())).ok)
+        assertTrue(engine.lastItem!!.subtitles.isEmpty())
+    }
+
+    @Test fun headersAndSubtitlesReachTheEngineAndOldLoadsStillWork() {
+        val p = paired().startSession()
+        assertEquals(true, p.call(Method.MEDIA_LOAD, mapOf("uri" to "https://h/a.mp4")).ok, "a UCP 1.0 sender without the new fields")
+        assertEquals(com.universalcast.playback.MediaItemInfo("https://h/a.mp4"), engine.lastItem)
+
+        val r = loadWith(p, mapOf(
+            "mimeType" to "application/x-mpegURL", "title" to "Ep 1",
+            "headers" to mapOf("Referer" to "https://site.example/ep1", "Cookie" to "cf=secretcookie"),
+            "subtitles" to listOf(mapOf("uri" to "https://cdn.example/ep1_en.vtt", "mimeType" to "text/vtt", "language" to "en")),
+        ))
+        assertEquals(true, r.ok)
+        val item = engine.lastItem!!
+        assertEquals("application/x-mpegURL", item.mimeType)
+        assertEquals(mapOf("Referer" to "https://site.example/ep1", "Cookie" to "cf=secretcookie"), item.headers)
+        assertEquals(listOf("https://cdn.example/ep1_en.vtt"), item.subtitles.map { it.uri })
+        assertFalse(item.toString().contains("secretcookie"))
+        assertFalse(p.conn.sent.any { it.contains("secretcookie") }, "header values are never echoed to anyone")
+    }
+
+    @Test fun observerCannotLoadEvenWithHeaders() {
+        val ctl = paired().startSession()
+        val obs = paired(Role.OBSERVER)
+        val r = obs.call(Method.MEDIA_LOAD, mapOf("uri" to "https://h/a.m3u8", "headers" to mapOf("Cookie" to "x=1"),
+            "subtitles" to listOf(mapOf("uri" to "https://h/a.vtt", "mimeType" to "text/vtt"))), sessionId = ctl.session)
+        assertEquals(ErrorCode.FORBIDDEN, r.code())
+        assertTrue(engine.calls.isEmpty())
+    }
+
+    @Test fun capabilitiesAdvertiseTheNewFeaturesButStillOnlyDirectUrls() {
+        val p = paired()
+        val f = Fields(p.call(Method.CAPABILITIES_GET).payload)
+        val features = f.stringList("features", 32, 64)
+        assertTrue("media-headers" in features && "subtitles" in features, features.toString())
+        assertEquals(listOf("direct-url"), f.stringList("playbackMethods", 8, 64))
+    }
+
+    @Test fun oversizedLoadIsRejectedBeforeValidation() {
+        val p = paired().startSession()
+        val subs = List(8) { mapOf("uri" to "https://cdn.example/" + "a".repeat(2000) + "$it.vtt", "mimeType" to "text/vtt") }
+        val headers = mapOf("Cookie" to "c".repeat(4096), "User-Agent" to "u".repeat(4000))
+        // ~24 KB: still a valid message; a 64 KiB+ message is refused by the size limit (tested elsewhere).
+        assertEquals(true, loadWith(p, mapOf("subtitles" to subs, "headers" to headers)).ok)
+        handler.onText(p.conn, EnvelopeCodec.encode(Envelope.request("big", ++p.seq, Method.MEDIA_LOAD,
+            mapOf("uri" to "https://h/a.mp4", "title" to "t".repeat(Ucp.MAX_MESSAGE_BYTES)), p.session)))
+        assertEquals(ErrorCode.MESSAGE_TOO_LARGE, p.last().code())
+    }
 }

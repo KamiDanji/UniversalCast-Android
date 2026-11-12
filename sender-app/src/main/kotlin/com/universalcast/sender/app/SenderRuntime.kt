@@ -2,6 +2,7 @@ package com.universalcast.sender.app
 
 import android.content.Context
 import android.os.Build
+import com.universalcast.sender.ConnectionPhase
 import com.universalcast.sender.EncryptedFileReceiverStore
 import com.universalcast.sender.PairedReceiver
 import com.universalcast.sender.PairingSession
@@ -23,7 +24,9 @@ class SenderRuntime(private val app: Context) {
     val storeOutcome: LoadOutcome
     val controller = SenderController(identity)
     val discovery = NsdDiscovery(app)
+    val filters = com.universalcast.sender.app.web.FilterLists(app)
 
+    @Volatile private var serviceRunning = false
     private val _state = MutableStateFlow(controller.state)
     val state: StateFlow<SenderState> = _state.asStateFlow()
     private val _receivers = MutableStateFlow<List<PairedReceiver>>(emptyList())
@@ -49,7 +52,13 @@ class SenderRuntime(private val app: Context) {
             _notice.value = "The list of paired TVs could not be read and was reset. Pair your TVs again."
         }
         refresh()
-        controller.addListener { _state.value = it }
+        controller.addListener {
+            _state.value = it
+            // Keep the connection alive in the background for as long as a TV connection is wanted.
+            val active = it.phase == ConnectionPhase.CONNECTED || it.phase == ConnectionPhase.CONNECTING || it.phase == ConnectionPhase.RECONNECTING
+            if (active && !serviceRunning) { serviceRunning = true; ConnectionService.start(app) }
+            else if (!active) serviceRunning = false
+        }
         controller.onAuthenticated = { r ->
             // Authenticated over the pinned key: addresses/port that worked are safe to remember.
             runCatching { store.save(r.copy(lastConnectedAtMs = System.currentTimeMillis())) }

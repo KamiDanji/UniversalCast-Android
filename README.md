@@ -17,12 +17,11 @@ QR code with the phone, compare the 6-digit code, approve on the TV, then cast a
 ## Status — read this first
 | Part | State |
 |---|---|
-| `:core` (protocol, crypto, pairing, auth, sessions, server, persistence logic, sender controller) | **Compiled and tested here: 165 JVM tests, all passing** |
-| `:app` (Android TV UI, Keystore, NSD, Media3, service) | Written in the sandbox; compiled and run only by you on your PC |
-| `:sender-app` (phone UI, Keystore, NSD discovery, QR scanning) | **Written but NOT compiled or run** (no Android SDK in the sandbox). Its connection logic lives in `:core` and is tested |
-| APKs | **Not built.** Run the build on your PC (see BUILD.md) |
+| `:core` (protocol, crypto, pairing, auth, sessions, server, persistence, sender controller, browser-cast logic) | Compiled and tested: see `reports/TEST_REPORT.md` |
+| `:app` (Android TV UI, Keystore, NSD, Media3, service, boot/auto-open) | Compiles (`assembleDebug`); policy unit tests pass; behaviour on a real TV is **unverified** |
+| `:sender-app` (phone UI, Keystore, NSD, QR, browser) | Compiles (`assembleDebug`); unit tests pass; behaviour on a real phone is **unverified** |
 
-Expect to possibly fix a few compile errors in `:app` on the first build. See `reports/KNOWN_LIMITATIONS.md`.
+What still needs a device is listed in `reports/FEATURE_REPORT.md` with a manual test checklist.
 
 ## Layout
 - `core/` – pure JVM Kotlin library. No Android or Media3 types, so everything security-relevant is unit/integration tested.
@@ -34,8 +33,18 @@ Expect to possibly fix a few compile errors in `:app` on the first build. See `r
 - Paired TVs are remembered (encrypted); each connection is pinned to the TV's key, whatever IP it has.
 - Finds TVs on the Wi-Fi via mDNS and uses their current address; falls back to the remembered addresses.
 - Remote: play/pause, ±10 s, seek bar, stop, speed, volume, "Cast a link" (direct http/https media URL), share links from other apps into UniversalCast.
+- **Browser** (Home → Browser, or share a web page into the app): for sites without a Cast button. Play the video,
+  tap "▶ N videos found – Cast", pick the stream and subtitles, cast. The TV plays HLS/DASH/MP4 directly from the CDN
+  with the page's Referer/Origin/User-Agent/cookies. DRM-protected streams are detected and can't be cast.
+  Built-in ad blocker (⋮ menu), pop-ups and "new tab" links stay in the browser, ← only goes back, Back twice closes.
 - Observer-role phones see what is playing but cannot control it; the UI says so.
 - Automatic reconnect with backoff, heartbeat, clear messages for revoked / unknown / changed-identity TVs.
+
+## TV app features
+- Clean player: only video, subtitles, a buffering spinner and error messages; no on-screen controls (the phone is
+  the remote). Back stops playback; the remote's play/pause key toggles playback.
+- Starts when the TV turns on (setting, default on) and comes to the front when a phone casts (needs "Display over
+  other apps"; see BUILD.md), then goes back to what the TV showed when playback ends.
 
 ## Features
 - UCP 1.0: versioned envelopes, request ids, per-direction sequence numbers, sessions, error codes, capabilities, state sync events, duplicate-request protection, size limits (64 KiB frames/messages).
@@ -45,11 +54,12 @@ Expect to possibly fix a few compile errors in `:app` on the first build. See `r
 - mDNS `_universalcast._tcp.local.` with TXT `ucp`, `id`, `path`, `tls`, `mode`.
 - Dark TV UI: Home, Pairing, Paired devices (revoke), Player, Settings/Diagnostics; D-pad focus rings.
 - Encrypted persistence: Keystore EC identity key (non-exportable) + AES-256-GCM encrypted, atomically written sender store with corruption recovery and migrations.
-- Extensible: `PlaybackEngine` interface and capability list (`playbackMethods: ["direct-url"]`). Browser casting is **not** implemented and not advertised.
+- `media.load` extensions (UCP 1.0, backward compatible): allowlisted request `headers` and side-loaded `subtitles`;
+  `capabilities.get` advertises `features: [..., "media-headers", "subtitles"]`, `playbackMethods: ["direct-url"]`.
 
 ## Quick start
 ```
-./gradlew :core:test            # 165 tests
+./gradlew :core:test            # JVM tests (counts in reports/TEST_REPORT.md)
 ./gradlew :app:assembleDebug          # TV receiver  -> app/build/outputs/apk/debug
 ./gradlew :sender-app:assembleDebug   # phone app    -> sender-app/build/outputs/apk/debug
 ```

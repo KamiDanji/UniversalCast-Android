@@ -48,19 +48,40 @@ resets (fail closed). No private key, secret, challenge or token is written to l
   make it trust a TV it was not paired with.
 
 ## Casting from websites (in-app browser)
-- `media.load` may carry `headers`, limited to `Referer`, `Origin`, `User-Agent` and `Cookie`
-  (`MediaHeaders`). Names are case-insensitive and may not repeat. Values must be single-line printable text
-  within length limits, and Referer/Origin must be http(s) URLs. Anything else is `INVALID_PAYLOAD`, so headers
-  can't be injected and nothing like `Host`/`Authorization` can be set.
-- Headers apply only to the stream they came with: one Media3 data source per load, kept in memory, never
-  logged, never in snapshots or events, and `MediaItemInfo.toString()` shows only header names. Observers see the
-  media URI as before, but never the headers.
-- The phone forwards the page's Referer/Origin/User-Agent and only the cookies the WebView holds for the stream's
-  own host, read at cast time. They travel only over the pinned, authenticated connection to a paired TV.
-- The browser has no JavaScript bridge into the app, no file/content access and no mixed content. Popups are
-  refused, and non-web schemes (`intent:`, `market:`…) are not followed. It only observes requests and never
-  changes them. Detected links are probed from the phone with the same headers before casting.
-- DRM-protected streams (Widevine etc.) are out of scope: the license exchange happens inside the page.
+- `media.load` may carry `headers` (UCP 1.0, optional, backward compatible). They are accepted **only from
+  Controller-role senders** (the permission check runs before any payload validation; Observers get `FORBIDDEN`).
+  Allowlist, case-insensitive and normalised: `Referer`, `Origin`, `User-Agent`, `Cookie`, `Accept-Language`. At most
+  5 entries, no name twice, each value 1–4096 visible ASCII characters (0x20–0x7E: no CR/LF/control characters, so no
+  header injection), names + values ≤ 8192 bytes, Referer/Origin must be http(s) URLs. Anything else is
+  `INVALID_PAYLOAD`; `Host`, `Authorization`, `Range` etc. can never be set.
+- `subtitles`: at most 8, each `{uri (http/https, ≤ 2048), mimeType ∈ text/vtt | application/x-subrip | text/x-ssa |
+  application/ttml+xml, language? (≤ 16, [A-Za-z0-9-]), label? (≤ 64, no control characters)}`, no unknown fields.
+- **Cookies are host-scoped on the TV**: the player adds `Cookie` only to requests whose host equals the media URI's
+  host. A network interceptor on every hop (OkHttp) strips it from any request to another host, so cookies never
+  reach CDN/segment hosts or redirect targets. (`DefaultHttpDataSource` was not used: it re-sends a request's extra
+  headers to every redirect hop.) Referer/Origin/Accept-Language go to all hosts, like a browser's player would send them.
+- **Header values are never logged**: not in the diagnostics log, not in logcat (Media3's library logger is switched
+  off for this reason), not in snapshots or events; `MediaItemInfo.toString()` shows header *names* only. Headers live
+  in memory for the current item and are dropped on stop or the next load.
+- The phone forwards the page's Referer/Origin/User-Agent/Accept-Language and only the cookies the WebView holds for the
+  stream URL, read at cast time. They travel only over the pinned, authenticated connection to a paired TV.
+- The phone's stream probe (`StreamProbe`) uses the same rules: Cookie only to the original host, never to a redirect
+  target; redirects only to http(s); at most 256 KiB read, 5 s timeouts.
+- The browser has no JavaScript bridge into the app (no `addJavascriptInterface`), no file/content access, one window
+  only, does not follow non-web schemes (`intent:`, `market:`, `file:`…) and survives a renderer crash. It only
+  observes requests and never changes them. The "Scan page" script only reads the DOM.
+- Ad blocking: a built-in domain blocklist (`AdBlocker`) answers ad requests with an empty response, blocks main-page
+  redirects to ad sites and filters "new window" requests (no tap → dropped; tapped → loaded in the same view unless
+  it is an ad site or a non-web scheme). A throw-away WebView used only to learn a pop-up's URL is destroyed at once.
+- DRM-protected streams (Widevine/FairPlay/PlayReady, SAMPLE-AES) are detected and not offered for casting.
+
+## Receiver auto-start and auto-open
+- The boot receiver is exported (system broadcasts must reach it) but can only start the receiver service, which the
+  app also starts whenever it is opened. It honours the "Start when the TV turns on" setting.
+- "Open automatically when a phone casts" uses the user-granted "Display over other apps" permission and a 1×1
+  transparent, non-focusable, non-touchable overlay window. That window never takes input or focus. The activity is
+  only brought to the front after an authenticated Controller started playback.
+- No unauthenticated or plaintext endpoint was added; the control channel is unchanged.
 
 ## Not covered / by design
 See `reports/KNOWN_LIMITATIONS.md` (e.g. cleartext http media fetches by the player, no device attestation, a root

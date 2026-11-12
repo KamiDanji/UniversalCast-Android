@@ -36,6 +36,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Page open in the cast browser (restored when coming back to it); a shared web page lands here too. */
     val browserUrl = MutableStateFlow<String?>(null)
 
+    /** Ad blocker of the cast browser (on by default; switch off for a site that breaks). */
+    val browserAdBlock = MutableStateFlow(true)
+
     /** Set when a shared web page should open the browser straight away. */
     val openBrowserRequest = MutableStateFlow(false)
 

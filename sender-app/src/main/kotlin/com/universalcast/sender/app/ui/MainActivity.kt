@@ -20,6 +20,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) handleShare(intent)
+        // Android 13+: the "connected to TV" notification needs this; without it the service still runs, just unseen.
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         setContent {
             SenderTheme {
                 var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
@@ -28,10 +32,11 @@ class MainActivity : ComponentActivity() {
                 // The browser handles Back itself (page history first).
                 BackHandler(enabled = screen != Screen.HOME && screen != Screen.BROWSER) { screen = Screen.HOME }
                 when (screen) {
-                    Screen.HOME -> HomeScreen(vm, onPair = { screen = Screen.PAIR }, onOpenRemote = { screen = Screen.REMOTE })
+                    Screen.HOME -> HomeScreen(vm, onPair = { screen = Screen.PAIR }, onOpenRemote = { screen = Screen.REMOTE }, onBrowse = { screen = Screen.BROWSER })
                     Screen.PAIR -> PairScreen(vm) { screen = Screen.HOME }
                     Screen.REMOTE -> RemoteScreen(vm, onClose = { screen = Screen.HOME }, onPairAgain = { screen = Screen.PAIR }, onBrowse = { screen = Screen.BROWSER })
-                    Screen.BROWSER -> BrowserScreen(vm, onClose = { screen = Screen.REMOTE }, onOpenRemote = { screen = Screen.REMOTE })
+                    // The browser shows the remote as an overlay itself, so the page stays loaded underneath.
+                    Screen.BROWSER -> BrowserScreen(vm, onClose = { screen = Screen.HOME }, onPairAgain = { screen = Screen.PAIR })
                 }
             }
         }
@@ -47,7 +52,7 @@ class MainActivity : ComponentActivity() {
     private fun handleShare(i: Intent?) {
         if (i?.action == Intent.ACTION_SEND && i.type == "text/plain") {
             val url = Links.extractHttpUrl(i.getStringExtra(Intent.EXTRA_TEXT)) ?: return
-            if (MediaSniffer.classifyUrl(url) != null) {
+            if (MediaSniffer.classify(url).castable) {
                 vm.setPendingUrl(url) // a direct stream/file link: cast it as is
             } else {
                 vm.browserUrl.value = url // a web page: open it and find the video it plays

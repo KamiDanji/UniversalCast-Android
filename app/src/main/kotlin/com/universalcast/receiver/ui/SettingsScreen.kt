@@ -1,11 +1,14 @@
 package com.universalcast.receiver.ui
 
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.universalcast.network.NetworkAddresses
@@ -22,14 +25,40 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(2000); tick++ } }
     val entries = remember(tick) { rt.log.entries().takeLast(40).reversed() }
+    val autostart by rt.settings.autostartOnBoot.collectAsState()
+    val autoOpen by rt.settings.autoOpenOnCast.collectAsState()
+    val ctx = LocalContext.current
+    val overlayGranted = remember(tick) { OverlayPermission.granted(ctx) }
 
     ScreenScaffold("Settings & diagnostics", onBack) {
         Row(horizontalArrangement = Arrangement.spacedBy(32.dp), modifier = Modifier.fillMaxSize()) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Card(Modifier.fillMaxWidth()) {
                     Text("Receiver name", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
                     Text(name, color = Palette.Text, style = MaterialTheme.typography.titleLarge)
                     TvButton("Rename", { editing = true }, primary = false)
+                }
+                Card(Modifier.fillMaxWidth()) {
+                    Text("Start when the TV turns on", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Starts the receiver after the TV boots. Open the app once after installing (Android keeps new apps stopped " +
+                            "until then). A TV in deep standby pauses all apps; phones can reach it again once it is fully on.",
+                        color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TvButton(if (autostart) "On" else "Off", { rt.settings.setAutostartOnBoot(!autostart) }, primary = autostart)
+                }
+                Card(Modifier.fillMaxWidth()) {
+                    Text("Open automatically when a phone casts", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
+                    TvButton(if (autoOpen) "On" else "Off", { rt.settings.setAutoOpenOnCast(!autoOpen) }, primary = autoOpen)
+                    InfoRow(
+                        "“Display over other apps”",
+                        if (overlayGranted) "granted" else "not granted – Android blocks opening the player from the background",
+                    )
+                    if (!overlayGranted && OverlayPermission.canOpenSettings(ctx)) {
+                        TvButton("Open permission screen", { OverlayPermission.openSettings(ctx) }, primary = false)
+                    }
+                    Text("If this TV has no such screen, run once from a computer:", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                    Text(OverlayPermission.adbCommand(ctx), color = Palette.Text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
                 }
                 Card(Modifier.fillMaxWidth()) {
                     InfoRow("Mode", rt.config.mode.wire)

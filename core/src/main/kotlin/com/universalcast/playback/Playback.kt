@@ -11,16 +11,27 @@ data class PlaybackErrorInfo(val code: String, val message: String, val recovera
 
 /**
  * What to play. [headers] are the extra HTTP request headers the stream needs (see [MediaHeaders]); they can carry
- * cookies, so they are never logged, never put in snapshots and never shown to other senders.
+ * cookies, so they are never logged, never put in snapshots and never shown to other senders. [subtitles] are
+ * side-loaded text tracks (see [SubtitleInfo]).
  */
 data class MediaItemInfo(
     val uri: String,
     val mimeType: String? = null,
     val title: String? = null,
     val headers: Map<String, String> = emptyMap(),
+    val subtitles: List<SubtitleInfo> = emptyList(),
 ) {
-    override fun toString() = "MediaItemInfo(uri=$uri, mimeType=$mimeType, title=$title, headers=${headers.keys})"
+    override fun toString() =
+        "MediaItemInfo(uri=$uri, mimeType=$mimeType, title=$title, headers=${headers.keys}, subtitles=${subtitles.size})"
 }
+
+/** One external subtitle file. [language] is a BCP-47-like tag ("en", "pt-BR"), [label] a display name. */
+data class SubtitleInfo(
+    val uri: String,
+    val mimeType: String,
+    val language: String? = null,
+    val label: String? = null,
+)
 
 /**
  * Immutable view of the player. [revision] increases with every published change, [capturedAtMs] lets a
@@ -160,34 +171,85 @@ object MediaUriValidator {
 /**
  * The only request headers a sender may ask the receiver to send when fetching media. Many sites only serve their
  * streams to requests that look like they come from their own player page, so the browser-side sender
- * forwards the page's Referer/Origin/User-Agent and, where needed, its cookies for the media host.
+ * forwards the page's Referer/Origin/User-Agent/Accept-Language and, where needed, its cookies for the media host.
  *
- * Header names are matched case-insensitively and normalised. Values must be single-line printable text (no header
- * injection); Referer and Origin must be http(s) URLs.
+ * Rules (UCP 1.0 `media.load.headers`): names from the allowlist only, matched case-insensitively and normalised;
+ * no name twice; at most [MAX_ENTRIES] entries; each value 1..[MAX_VALUE_LENGTH] visible ASCII characters
+ * (0x20-0x7E, so no CR/LF/control characters and no header injection); names + values at most [MAX_TOTAL_BYTES]
+ * bytes in total; Referer and Origin must be http(s) URLs.
  */
 object MediaHeaders {
     const val REFERER = "Referer"
     const val ORIGIN = "Origin"
     const val USER_AGENT = "User-Agent"
     const val COOKIE = "Cookie"
-    private val ALLOWED = listOf(REFERER, ORIGIN, USER_AGENT, COOKIE).associateBy { it.lowercase() }
-    private val MAX_LEN = mapOf(REFERER to 2048, ORIGIN to 512, USER_AGENT to 512, COOKIE to 8192)
+    const val ACCEPT_LANGUAGE = "Accept-Language"
+    const val MAX_ENTRIES = 5
+    const val MAX_VALUE_LENGTH = 4096
+    const val MAX_TOTAL_BYTES = 8192
+    val ALLOWED: List<String> = listOf(REFERER, ORIGIN, USER_AGENT, COOKIE, ACCEPT_LANGUAGE)
+    private val BY_LOWER = ALLOWED.associateBy { it.lowercase() }
 
-    /** Returns the normalised map or throws [IllegalArgumentException] with a reason. */
+    /** The canonical spelling of [name] if it is allowlisted, else null. */
+    fun canonical(name: String): String? = BY_LOWER[name.lowercase()]
+
+    fun isVisibleAscii(v: String) = v.all { it.code in 0x20..0x7E }
+
+    /** Returns the normalised map or throws [IllegalArgumentException] with a reason (never containing a value). */
     fun validate(raw: Map<String, Any?>): Map<String, String> {
+        if (raw.size > MAX_ENTRIES) throw IllegalArgumentException("At most $MAX_ENTRIES headers are allowed")
         val out = LinkedHashMap<String, String>()
+        var total = 0
         for ((k, v) in raw) {
-            val name = ALLOWED[k.lowercase()] ?: throw IllegalArgumentException("Header '$k' is not allowed")
+            val name = canonical(k) ?: throw IllegalArgumentException("Header '${k.take(40).filter { it.code in 0x21..0x7E }}' is not allowed")
             if (name in out) throw IllegalArgumentException("Header '$name' is repeated")
             if (v !is String) throw IllegalArgumentException("Header '$name' must be a string")
-            if (v.isEmpty() || v.length > MAX_LEN.getValue(name)) throw IllegalArgumentException("Header '$name' has invalid length")
-            if (v.any { it.code < 0x20 || it.code == 0x7F }) throw IllegalArgumentException("Header '$name' contains control characters")
+            if (v.isEmpty() || v.length > MAX_VALUE_LENGTH) throw IllegalArgumentException("Header '$name' has invalid length")
+            if (!isVisibleAscii(v)) throw IllegalArgumentException("Header '$name' must be visible ASCII")
             if (name == REFERER || name == ORIGIN) {
                 val scheme = runCatching { java.net.URI(v).scheme?.lowercase() }.getOrNull()
                 if (scheme != "http" && scheme != "https") throw IllegalArgumentException("Header '$name' must be an http(s) URL")
             }
+            total += name.length + v.length
+            if (total > MAX_TOTAL_BYTES) throw IllegalArgumentException("Headers exceed $MAX_TOTAL_BYTES bytes")
             out[name] = v
         }
         return out
+    }
+}
+
+/** Validation of `media.load.subtitles`. */
+object SubtitleValidator {
+    const val MAX_TRACKS = 8
+    const val MAX_LABEL = 64
+    val MIME_TYPES: Set<String> = setOf("text/vtt", "application/x-subrip", "text/x-ssa", "application/ttml+xml")
+    private val KEYS = setOf("uri", "mimeType", "language", "label")
+    private val LANGUAGE = Regex("^[A-Za-z0-9-]{1,16}$")
+
+    /** Throws [IllegalArgumentException] with a reason. */
+    fun validate(raw: Any?): List<SubtitleInfo> {
+        if (raw !is List<*>) throw IllegalArgumentException("subtitles must be an array")
+        if (raw.size > MAX_TRACKS) throw IllegalArgumentException("At most $MAX_TRACKS subtitle tracks are allowed")
+        return raw.mapIndexed { i, item ->
+            @Suppress("UNCHECKED_CAST")
+            val m = item as? Map<String, Any?> ?: throw IllegalArgumentException("subtitles[$i] must be an object")
+            if (m.keys.any { it !in KEYS }) throw IllegalArgumentException("subtitles[$i] has an unknown field")
+            val uri = (m["uri"] as? String) ?: throw IllegalArgumentException("subtitles[$i].uri is required")
+            try {
+                MediaUriValidator.validateUri(uri)
+            } catch (e: IllegalArgumentException) {
+                throw IllegalArgumentException("subtitles[$i].uri: ${e.message}")
+            }
+            val mime = (m["mimeType"] as? String)?.takeIf { it in MIME_TYPES }
+                ?: throw IllegalArgumentException("subtitles[$i].mimeType is not supported")
+            val language = m["language"]?.let {
+                (it as? String)?.takeIf { s -> LANGUAGE.matches(s) } ?: throw IllegalArgumentException("subtitles[$i].language is invalid")
+            }
+            val label = m["label"]?.let {
+                (it as? String)?.takeIf { s -> s.isNotEmpty() && s.length <= MAX_LABEL && s.none { c -> c.code < 0x20 || c.code == 0x7F } }
+                    ?: throw IllegalArgumentException("subtitles[$i].label is invalid")
+            }
+            SubtitleInfo(uri, mime, language, label)
+        }
     }
 }

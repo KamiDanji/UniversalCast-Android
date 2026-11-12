@@ -1,18 +1,24 @@
 package com.universalcast.receiver.platform
 
 import android.content.Context
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.universalcast.sender.MediaSniffer
+import okhttp3.OkHttpClient
 import com.universalcast.playback.EngineState
 import com.universalcast.playback.MediaHeaders
 import com.universalcast.playback.MediaItemInfo
@@ -51,6 +57,13 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     private var hasStarted = false
     private var lastPublished: PlaybackSnapshot? = null
     private var released = false
+
+    init {
+        // Media3's own logcat output can include request details of failed loads (URLs with signed query strings).
+        // Headers/cookies/tokens must never reach logcat, so the library logger is off; errors still reach the phone
+        // through the snapshot and the TV's diagnostics log as short, sanitised messages.
+        androidx.media3.common.util.Log.setLogLevel(androidx.media3.common.util.Log.LOG_LEVEL_OFF)
+    }
 
     /** For rendering only (PlayerView). Must be used on the main thread. */
     val player: ExoPlayer get() = ensurePlayer()
@@ -101,10 +114,17 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         check(Looper.myLooper() == Looper.getMainLooper())
         exo?.let { return it }
         check(!released) { "Engine released" }
-        return ExoPlayer.Builder(app).build().also {
-            it.addListener(playerListener)
-            exo = it
-        }
+        return ExoPlayer.Builder(app)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(DefaultDataSource.Factory(app, ResolvingDataSource.Factory(http, resolver))))
+            .build().also {
+                // Subtitles: prefer English, but also pick tracks without a language tag (common for side-loaded files).
+                it.trackSelectionParameters = it.trackSelectionParameters.buildUpon()
+                    .setPreferredTextLanguage("en")
+                    .setSelectUndeterminedTextLanguage(true)
+                    .build()
+                it.addListener(playerListener)
+                exo = it
+            }
     }
 
     private fun <T> onMain(block: () -> T): T {
@@ -171,30 +191,83 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         val p = ensurePlayer()
         error = null; hasBeenReady = false; hasStarted = false
         mediaUri = item.uri; title = item.title
+        p.stop() // release the previous item's loaders before its request context is replaced
+        requestContext = RequestContext.of(item)
+        http.setUserAgent(item.headers[MediaHeaders.USER_AGENT] ?: DEFAULT_USER_AGENT)
+        // Without an extension (".../playlist?id=1") Media3 can't tell HLS/DASH from a file: use the sender's MIME type,
+        // else what the URL looks like.
+        val mime = item.mimeType ?: MediaSniffer.classify(item.uri).mimeType
+        val subtitles = item.subtitles.mapIndexed { i, s ->
+            MediaItem.SubtitleConfiguration.Builder(Uri.parse(s.uri))
+                .setMimeType(s.mimeType)
+                .setLanguage(s.language)
+                .setLabel(s.label)
+                .setSelectionFlags(if (i == 0) C.SELECTION_FLAG_DEFAULT else 0)
+                .build()
+        }
         val mi = MediaItem.Builder().setUri(item.uri)
-            .apply { item.mimeType?.let { setMimeType(it) } }
+            .apply { mime?.let { setMimeType(it) } }
+            .setSubtitleConfigurations(subtitles)
             .setMediaMetadata(MediaMetadata.Builder().setTitle(item.title).build())
             .build()
-        p.setMediaSource(mediaSourceFactory(item.headers).createMediaSource(mi), startPositionMs.coerceAtLeast(0))
+        p.setMediaItem(mi, startPositionMs.coerceAtLeast(0))
         p.playWhenReady = autoplay
         p.prepare()
         publish()
     }
 
     /**
-     * A fresh data source per item, so the headers a sender supplied for one stream (Referer/Origin/User-Agent/Cookie,
-     * already allowlisted by the handler) apply to every request of that stream — playlists, segments, AES keys —
-     * and never leak into the next one. Headers are kept only in memory, never logged.
+     * Per-load request context: the headers a sender supplied for one stream (already allowlisted by the handler)
+     * and the host of its media URI. Kept only in memory, never logged, replaced on every load and cleared on stop.
      */
-    private fun mediaSourceFactory(headers: Map<String, String>): DefaultMediaSourceFactory {
-        val http = DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(20_000)
-            .setUserAgent(headers[MediaHeaders.USER_AGENT] ?: DEFAULT_USER_AGENT)
-            .setDefaultRequestProperties(headers - MediaHeaders.USER_AGENT)
-        return DefaultMediaSourceFactory(DefaultDataSource.Factory(app, http))
+    private class RequestContext(val headers: Map<String, String>, val mediaHost: String?) {
+        companion object {
+            fun of(item: MediaItemInfo) = RequestContext(
+                item.headers - MediaHeaders.USER_AGENT,
+                runCatching { Uri.parse(item.uri).host?.lowercase() }.getOrNull(),
+            )
+        }
     }
+
+    @Volatile
+    private var requestContext: RequestContext? = null
+
+    /**
+     * Adds the sender's headers to every request of the current item — master/media playlists, segments, keys and
+     * subtitle files alike. Referer, Origin and Accept-Language go to every host (a CDN checks them like the page's
+     * player would send them); Cookie only to the media URI's own host, so cookies never reach CDN/segment hosts.
+     */
+    private val resolver = ResolvingDataSource.Resolver { spec: DataSpec ->
+        val ctx = requestContext
+        if (ctx == null || ctx.headers.isEmpty()) return@Resolver spec
+        val sameHost = ctx.mediaHost != null && spec.uri.host?.lowercase() == ctx.mediaHost
+        val add = ctx.headers.filterKeys { it != MediaHeaders.COOKIE || sameHost }
+        if (add.isEmpty()) spec else spec.withAdditionalHeaders(add)
+    }
+
+    /**
+     * HTTP stack: OkHttp (already a dependency through media3-datasource-okhttp) rather than DefaultHttpDataSource,
+     * because DefaultHttpDataSource re-sends a request's extra headers to every redirect hop, which would hand the
+     * Cookie to a redirect target. The network interceptor sees each hop and strips Cookie from any request whose
+     * host is not the media host. Redirects across http/https are followed (followSslRedirects).
+     */
+    private val okHttp = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
+        .addNetworkInterceptor { chain ->
+            val req = chain.request()
+            val host = requestContext?.mediaHost
+            if (req.header(MediaHeaders.COOKIE) != null && (host == null || !req.url.host.equals(host, ignoreCase = true))) {
+                chain.proceed(req.newBuilder().removeHeader(MediaHeaders.COOKIE).build())
+            } else {
+                chain.proceed(req)
+            }
+        }
+        .build()
+
+    private val http = OkHttpDataSource.Factory(okHttp).setUserAgent(DEFAULT_USER_AGENT)
 
     override fun play() = onMain {
         val p = ensurePlayer()
@@ -209,6 +282,7 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     override fun stop() = onMain {
         val p = ensurePlayer()
         p.stop(); p.clearMediaItems()
+        requestContext = null
         mediaUri = null; title = null; error = null; hasBeenReady = false; hasStarted = false
         publish()
     }

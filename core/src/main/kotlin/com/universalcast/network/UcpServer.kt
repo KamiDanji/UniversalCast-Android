@@ -3,6 +3,8 @@ package com.universalcast.network
 import com.universalcast.core.DiagnosticsLog
 import com.universalcast.ucp.Ucp
 import org.java_websocket.WebSocket
+import org.java_websocket.WebSocketImpl
+import org.java_websocket.WrappedByteChannel
 import org.java_websocket.drafts.Draft
 import org.java_websocket.drafts.Draft_6455
 import org.java_websocket.extensions.DefaultExtension
@@ -17,6 +19,8 @@ import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.SSLContext
 
@@ -54,6 +58,17 @@ class UcpServer(
     @Volatile
     private var startError: Exception? = null
 
+    /**
+     * Works around a lost-wakeup race in Java-WebSocket 1.6.0's NIO server: `WebSocketServer.doWrite()` (selector
+     * thread) first writes the out-queue empty and only afterwards sets the key's interest back to OP_READ. A message
+     * queued by a worker thread in between calls `onWriteDemand()` (OP_READ|OP_WRITE), which that late
+     * `interestOps(OP_READ)` then overwrites, so the message stays queued until something else is sent on that
+     * connection. Seen as a request whose response never arrives (sender heartbeat/request timeouts under load).
+     * This watchdog re-arms write interest for any connection that still has queued or TLS-buffered output.
+     */
+    private val writeWatchdog: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "ucp-write-watchdog").also { it.isDaemon = true } }
+
     init {
         isReuseAddr = true
         isDaemon = true
@@ -75,6 +90,7 @@ class UcpServer(
     }
 
     fun stopQuietly() {
+        writeWatchdog.shutdownNow()
         try {
             stop(1000)
         } catch (e: Exception) {
@@ -83,7 +99,21 @@ class UcpServer(
     }
 
     override fun onStart() {
+        writeWatchdog.scheduleWithFixedDelay({ rearmStalledWrites() }, WATCHDOG_MS, WATCHDOG_MS, TimeUnit.MILLISECONDS)
         started.countDown()
+    }
+
+    /** See [writeWatchdog]. Cheap: a handful of connections, two field reads each. */
+    internal fun rearmStalledWrites() {
+        for (ws in connections.keys) {
+            val impl = ws as? WebSocketImpl ?: continue
+            try {
+                val tlsPending = (impl.channel as? WrappedByteChannel)?.isNeedWrite == true
+                if (impl.isOpen && (impl.outQueue.isNotEmpty() || tlsPending)) onWriteDemand(impl)
+            } catch (e: Exception) {
+                // the connection is closing; the server cleans it up
+            }
+        }
     }
 
     override fun onOpen(conn: WebSocket, handshake: ClientHandshake) {
@@ -106,6 +136,10 @@ class UcpServer(
 
     override fun onClose(conn: WebSocket, code: Int, reason: String?, remote: Boolean) {
         connections.remove(conn)?.let { handler.onClose(it) }
+    }
+
+    private companion object {
+        const val WATCHDOG_MS = 100L
     }
 
     override fun onError(conn: WebSocket?, ex: Exception) {

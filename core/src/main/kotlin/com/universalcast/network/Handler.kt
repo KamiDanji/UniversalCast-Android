@@ -19,6 +19,7 @@ import com.universalcast.playback.PlaybackEngine
 import com.universalcast.playback.PlaybackListener
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
+import com.universalcast.playback.SubtitleValidator
 import com.universalcast.security.Bytes
 import com.universalcast.security.Fingerprint
 import com.universalcast.security.ReceiverIdentity
@@ -447,7 +448,14 @@ class UcpProtocolHandler(
                         throw UcpException(ErrorCode.INVALID_PAYLOAD, e.message ?: "Invalid headers")
                     }
                 } ?: emptyMap()
-                engine.load(MediaItemInfo(uri, mime, title, headers), autoplay, start)
+                val subtitles = f.raw["subtitles"]?.let {
+                    try {
+                        SubtitleValidator.validate(it)
+                    } catch (e: IllegalArgumentException) {
+                        throw UcpException(ErrorCode.INVALID_PAYLOAD, e.message ?: "Invalid subtitles")
+                    }
+                } ?: emptyList()
+                engine.load(MediaItemInfo(uri, mime, title, headers, subtitles), autoplay, start)
             }
             Method.PLAYBACK_STOP -> engine.stop()
             else -> {
@@ -476,8 +484,8 @@ class UcpProtocolHandler(
         "role" to role.name,
         "permissions" to role.permissions.map { it.name }.sorted(),
         "maxMessageBytes" to Ucp.MAX_MESSAGE_BYTES,
-        "features" to listOf("session", "snapshot", "events", "seek", "speed", "volume"),
-        // Extension point for future browser casting: new transfer methods are added here without protocol changes.
+        "features" to listOf("session", "snapshot", "events", "seek", "speed", "volume", "media-headers", "subtitles"),
+        // Browser casting still uses direct URLs: the TV fetches the stream itself (with the headers above).
         "playbackMethods" to listOf("direct-url"),
         "media" to linkedMapOf(
             "uriSchemes" to listOf("http", "https"),

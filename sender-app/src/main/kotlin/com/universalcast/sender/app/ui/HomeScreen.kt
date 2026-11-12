@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,7 +16,7 @@ import com.universalcast.sender.PairedReceiver
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit) {
+fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, onBrowse: () -> Unit) {
     val rt = vm.rt
     val receivers by rt.receivers.collectAsState()
     val nearby by rt.discovery.tvs.collectAsState()
@@ -30,7 +31,7 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit) {
         containerColor = Palette.Background,
         topBar = {
             TopAppBar(
-                title = { Text("UniversalCast") },
+                title = { Text("UniversalCast", style = MaterialTheme.typography.titleLarge) },
                 actions = { TextButton(onClick = { renaming = true }) { Text(name, color = Palette.TextDim, maxLines = 1) } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Background, titleContentColor = Palette.Text),
             )
@@ -78,7 +79,7 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit) {
                 item {
                     Panel {
                         Text("No TV paired yet", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
-                        Text("1. Open UniversalCast Receiver on your TV.\n2. Choose “Pair a new device” so a QR code appears.\n3. Tap “Pair a TV” here and scan it.", color = Palette.TextDim)
+                        Text("Open UniversalCast on your TV, choose “Pair a new device”, then tap “Pair a TV” and scan the QR code.", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
@@ -95,8 +96,27 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit) {
                             }
                         }
                         Button(onClick = { rt.connect(r); onOpenRemote() }) { Text(if (connectedHere) "Open" else "Connect") }
+                        var menu by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More", tint = Palette.TextDim) }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(text = { Text("Forget this TV", color = Palette.Danger) }, onClick = { menu = false; forgetting = r })
+                            }
+                        }
                     }
-                    TextButton(onClick = { forgetting = r }) { Text("Forget this TV", color = Palette.Danger) }
+                }
+            }
+
+            item {
+                Panel {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Cast from a website", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                            Text("Play a video in the browser, cast what it plays.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        FilledTonalButton(onClick = onBrowse) { Text("Browser") }
+                    }
                 }
             }
 
