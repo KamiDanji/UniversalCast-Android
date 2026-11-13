@@ -37,12 +37,13 @@ fun PairScreen(vm: AppViewModel, onClose: () -> Unit) {
     DisposableEffect(Unit) { onDispose { vm.resetPairing() } }
 
     Scaffold(
-        containerColor = Palette.Background,
+        modifier = Modifier.appBackground(),
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("Pair a TV") },
                 navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Background, titleContentColor = Palette.Text, navigationIconContentColor = Palette.Text),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent, titleContentColor = Palette.Text, navigationIconContentColor = Palette.Text),
             )
         },
     ) { pad ->

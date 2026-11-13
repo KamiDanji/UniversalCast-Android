@@ -1,6 +1,8 @@
 package com.universalcast.receiver.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -39,7 +41,9 @@ fun TvButton(
 @Composable
 fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier.background(Palette.Surface, RoundedCornerShape(20.dp)).padding(24.dp),
+        modifier.reveal()
+            .background(Brush.linearGradient(listOf(Palette.SurfaceHigh, Palette.Surface)), RoundedCornerShape(20.dp))
+            .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(20.dp)).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         content = content,
     )
@@ -57,7 +61,7 @@ fun Chip(text: String, color: Color) {
 
 @Composable
 fun ScreenScaffold(title: String, onBack: (() -> Unit)?, actions: @Composable RowScope.() -> Unit = {}, content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().background(Palette.Background).padding(horizontal = 56.dp, vertical = 36.dp)) {
+    Column(Modifier.fillMaxSize().appBackground().padding(horizontal = 56.dp, vertical = 36.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
             if (onBack != null) TvButton("‹ Back", onBack, primary = false)
             Text(title, style = MaterialTheme.typography.headlineMedium, color = Palette.Text, modifier = Modifier.weight(1f))

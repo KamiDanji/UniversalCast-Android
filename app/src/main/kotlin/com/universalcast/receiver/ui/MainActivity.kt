@@ -74,6 +74,8 @@ class MainActivity : ComponentActivity() {
                         Screen.SETTINGS -> SettingsScreen(vm) { screen = Screen.HOME }
                     }
                 }
+                var splash by rememberSaveable { mutableStateOf(true) }
+                if (splash) SplashOverlay { splash = false }
             }
         }
     }

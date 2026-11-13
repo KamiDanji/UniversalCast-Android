@@ -6,6 +6,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.universalcast.sender.MediaSniffer
@@ -33,13 +38,21 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(openBrowser) { if (openBrowser) { screen = Screen.BROWSER; vm.openBrowserRequest.value = false } }
                 // The browser handles Back itself (page history first).
                 BackHandler(enabled = screen != Screen.HOME && screen != Screen.BROWSER) { screen = Screen.HOME }
-                when (screen) {
+                AnimatedContent(
+                    targetState = screen,
+                    transitionSpec = { fadeIn(tween(260)) togetherWith fadeOut(tween(160)) },
+                    label = "screen",
+                ) { target ->
+                when (target) {
                     Screen.HOME -> HomeScreen(vm, onPair = { screen = Screen.PAIR }, onOpenRemote = { screen = Screen.REMOTE }, onBrowse = { screen = Screen.BROWSER })
                     Screen.PAIR -> PairScreen(vm) { screen = Screen.HOME }
                     Screen.REMOTE -> RemoteScreen(vm, onClose = { screen = Screen.HOME }, onPairAgain = { screen = Screen.PAIR }, onBrowse = { screen = Screen.BROWSER })
                     // The browser shows the remote as an overlay itself, so the page stays loaded underneath.
                     Screen.BROWSER -> BrowserScreen(vm, onClose = { screen = Screen.HOME }, onPairAgain = { screen = Screen.PAIR })
                 }
+                }
+                var splash by rememberSaveable { mutableStateOf(true) }
+                if (splash) SplashOverlay { splash = false }
             }
         }
     }

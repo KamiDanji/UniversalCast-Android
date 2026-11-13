@@ -29,7 +29,8 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, o
     var renaming by remember { mutableStateOf(false) }
 
     Scaffold(
-        containerColor = Palette.Background,
+        modifier = Modifier.appBackground(),
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("UniversalCast", style = MaterialTheme.typography.titleLarge) },
@@ -44,7 +45,7 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, o
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Background, titleContentColor = Palette.Text),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent, titleContentColor = Palette.Text),
             )
         },
         floatingActionButton = {
