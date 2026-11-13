@@ -370,6 +370,12 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
                             WebView(ctx).apply {
+                                // Without explicit match-parent params the first layout pass can see a 0-size viewport, which
+                                // leaves vh/dvh/svh CSS units at 0px for the page's lifetime (menus with max-height:100dvh collapse).
+                                layoutParams = android.view.ViewGroup.LayoutParams(
+                                    android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                                )
+                                if (com.universalcast.sender.app.BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
                                 settings.apply {
                                     javaScriptEnabled = true
                                     domStorageEnabled = true
