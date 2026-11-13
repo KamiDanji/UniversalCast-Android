@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.universalcast.sender.ConnectionPhase
 import com.universalcast.sender.PairedReceiver
@@ -32,7 +33,17 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, o
         topBar = {
             TopAppBar(
                 title = { Text("UniversalCast", style = MaterialTheme.typography.titleLarge) },
-                actions = { TextButton(onClick = { renaming = true }) { Text(name, color = Palette.TextDim, maxLines = 1) } },
+                actions = {
+                    TextButton(onClick = { renaming = true }) { Text(name, color = Palette.TextDim, maxLines = 1) }
+                    var appMenu by remember { mutableStateOf(false) }
+                    val updates = (LocalContext.current.applicationContext as com.universalcast.sender.app.SenderApp).updates
+                    Box {
+                        IconButton(onClick = { appMenu = true }) { Icon(Icons.Default.MoreVert, "Menu", tint = Palette.TextDim) }
+                        DropdownMenu(expanded = appMenu, onDismissRequest = { appMenu = false }) {
+                            DropdownMenuItem(text = { Text("Check for updates (v${updates.currentVersion})") }, onClick = { appMenu = false; updates.checkNow() })
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Palette.Background, titleContentColor = Palette.Text),
             )
         },

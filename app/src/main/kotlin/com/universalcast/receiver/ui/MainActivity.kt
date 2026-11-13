@@ -18,6 +18,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.universalcast.playback.PlaybackStatus
+import com.universalcast.receiver.UniversalCastApp
 import com.universalcast.receiver.service.ReceiverService
 
 private enum class Screen { HOME, PAIRING, DEVICES, SETTINGS }
@@ -63,6 +64,8 @@ class MainActivity : ComponentActivity() {
                     BackHandler { vm.runtime.engine.stop() } // safety exit: Back stops playback and returns Home
                     PlayerScreen(vm.runtime.engine, playback)
                 } else {
+                    // Never interrupt a cast with an update dialog; it appears once playback is over.
+                    UpdatePrompt((application as UniversalCastApp).updates)
                     BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
                     when (screen) {
                         Screen.HOME -> HomeScreen(vm, { screen = Screen.PAIRING }, { screen = Screen.DEVICES }, { screen = Screen.SETTINGS })
@@ -79,6 +82,11 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleCastIntent(intent)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        (application as UniversalCastApp).updates.checkIfStale() // silent unless a newer release exists
     }
 
     override fun onResume() {

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Needed to hand a downloaded APK to the system package installer (the user still confirms). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application>
+        <!-- Receives the PackageInstaller session result. Not exported: only our own explicit PendingIntent reaches it. -->
+        <receiver
+            android:name="com.universalcast.updater.InstallResultReceiver"
+            android:exported="false" />
+    </application>
+</manifest>

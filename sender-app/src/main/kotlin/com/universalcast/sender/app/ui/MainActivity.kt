@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.universalcast.sender.MediaSniffer
 import com.universalcast.sender.app.Links
+import com.universalcast.sender.app.SenderApp
 import com.universalcast.sender.app.web.BrowserScreen
 
 private enum class Screen { HOME, PAIR, REMOTE, BROWSER }
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
         ) registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         setContent {
             SenderTheme {
+                UpdatePrompt((application as SenderApp).updates)
                 var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
                 val openBrowser by vm.openBrowserRequest.collectAsState()
                 LaunchedEffect(openBrowser) { if (openBrowser) { screen = Screen.BROWSER; vm.openBrowserRequest.value = false } }
@@ -63,6 +65,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        (application as SenderApp).updates.checkIfStale() // silent unless a newer release exists
         vm.rt.discovery.start()
     }
 

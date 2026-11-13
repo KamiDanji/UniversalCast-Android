@@ -18,3 +18,4 @@ rootProject.name = "UniversalCast-Android-Receiver"
 include(":core")
 include(":app")
 include(":sender-app")
+include(":updater")

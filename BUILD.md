@@ -25,8 +25,36 @@ device/emulator (API 23+, Android TV system image).
 - Phone app needs Android 8.0 (API 26)+; it asks for the camera only when you scan a QR code.
 
 ## Signing the release build
-Create a keystore and add a `signingConfigs` block to `app/build.gradle.kts`, or sign the unsigned APK with
-`apksigner`. No signing key is shipped.
+In-place updates only work if every release is signed with the **same key**. Create one once and keep it safe
+(losing it means users must uninstall to update):
+```
+keytool -genkeypair -v -keystore universalcast-release.jks -alias universalcast -keyalg RSA -keysize 2048 -validity 10000
+```
+Then create `keystore.properties` in the project root (git-ignored, never commit it or the `.jks`):
+```
+storeFile=universalcast-release.jks
+storePassword=...
+keyAlias=universalcast
+keyPassword=...
+```
+`assembleRelease` then produces signed APKs. Without that file the release APKs stay unsigned.
+
+## Releasing an update (auto-updater)
+Both apps check GitHub's latest release on start (at most once an hour) and offer to download and install it.
+Debug builds never update (different applicationId).
+
+1. Bump `uc.versionName` (e.g. `1.0.1`) and `uc.versionCode` (+1) in `gradle.properties`. Both apps share them.
+2. `./gradlew assembleRelease` with `keystore.properties` in place.
+3. Create a GitHub release tagged `v<versionName>` (e.g. `v1.0.1`, not a draft or pre-release) and attach the two APKs,
+   renamed so the names start with:
+   - `universalcast-receiver` (from `app/build/outputs/apk/release/`), e.g. `universalcast-receiver-1.0.1.apk`
+   - `universalcast-sender` (from `sender-app/build/outputs/apk/release/`), e.g. `universalcast-sender-1.0.1.apk`
+4. The release notes become the "what's new" text in the update dialog.
+
+The repository must be **public** (the apps call the unauthenticated GitHub API). The updater only downloads over
+https from github.com / githubusercontent.com, checks GitHub's SHA-256 digest of the asset, checks the APK is the same
+app and a higher versionCode, and Android itself refuses an APK signed with a different key. The first install of each
+app still has to be done by hand; the user must also allow "install unknown apps" for UniversalCast once.
 
 ## Dev vs prod
 `BuildConfig.OPERATING_MODE` is `development` (debug) or `production` (release). The mode only changes labels and

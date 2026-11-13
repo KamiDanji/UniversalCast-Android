@@ -61,6 +61,16 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     Text(OverlayPermission.adbCommand(ctx), color = Palette.Text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
                 }
                 Card(Modifier.fillMaxWidth()) {
+                    val updates = (ctx.applicationContext as com.universalcast.receiver.UniversalCastApp).updates
+                    val us by updates.state.collectAsState()
+                    Text("App version", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                    Text(updates.currentVersion, color = Palette.Text, style = MaterialTheme.typography.titleLarge)
+                    TvButton(
+                        if (us is com.universalcast.updater.UpdateState.Checking) "Checking…" else "Check for updates",
+                        { updates.checkNow() }, primary = false, enabled = us !is com.universalcast.updater.UpdateState.Checking,
+                    )
+                }
+                Card(Modifier.fillMaxWidth()) {
                     InfoRow("Mode", rt.config.mode.wire)
                     InfoRow("Transport", "WSS (TLS 1.2/1.3 only), authentication required")
                     InfoRow("Status", if (running) "listening on port ${rt.core.boundPort}" else "stopped")
