@@ -1,5 +1,6 @@
 package com.universalcast.receiver.ui
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
@@ -41,7 +42,7 @@ fun TvButton(
 @Composable
 fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier.reveal()
+        modifier.reveal().animateContentSize()
             .background(Brush.linearGradient(listOf(Palette.SurfaceHigh, Palette.Surface)), RoundedCornerShape(20.dp))
             .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(20.dp)).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -50,13 +51,15 @@ fun Card(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> U
 }
 
 @Composable
-fun Chip(text: String, color: Color) {
-    Text(
-        text,
-        color = color,
-        style = MaterialTheme.typography.bodyMedium,
-        modifier = Modifier.background(color.copy(alpha = 0.16f), RoundedCornerShape(50)).padding(horizontal = 14.dp, vertical = 4.dp),
-    )
+fun Chip(text: String, color: Color, live: Boolean = false) {
+    Row(
+        Modifier.background(color.copy(alpha = 0.16f), RoundedCornerShape(50)).padding(horizontal = 14.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (live) PulseDot(color, 10.dp)
+        Text(text, color = color, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 @Composable

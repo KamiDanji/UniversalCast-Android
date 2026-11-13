@@ -14,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -57,13 +58,18 @@ fun UniversalCastTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = scheme, typography = typography, content = content)
 }
 
-/** Visible D-pad focus ring (white, 3 dp) for anything focusable. */
+/** D-pad focus: a white ring that fades in, plus a springy 4% zoom so the focused item clearly "lifts". */
 @Composable
 fun Modifier.focusRing(radius: Int = 14): Modifier {
     var focused by remember { mutableStateOf(false) }
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        if (focused) 1.04f else 1f, androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 400f), label = "focusScale",
+    )
+    val ring by androidx.compose.animation.core.animateFloatAsState(if (focused) 1f else 0f, androidx.compose.animation.core.tween(160), label = "focusRing")
     return this
         .onFocusChanged { focused = it.isFocused }
-        .then(if (focused) Modifier.border(3.dp, Palette.Focus, RoundedCornerShape(radius.dp)) else Modifier)
+        .graphicsLayer { scaleX = scale; scaleY = scale }
+        .border(3.dp, Palette.Focus.copy(alpha = ring), RoundedCornerShape(radius.dp))
 }
 
 @Composable

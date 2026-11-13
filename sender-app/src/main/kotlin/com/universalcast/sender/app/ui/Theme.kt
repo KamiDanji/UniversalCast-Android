@@ -1,5 +1,6 @@
 package com.universalcast.sender.app.ui
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.Brush
@@ -41,7 +42,7 @@ fun SenderTheme(content: @Composable () -> Unit) {
 @Composable
 fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Column(
-        modifier.fillMaxWidth().reveal()
+        modifier.fillMaxWidth().reveal().animateContentSize()
             .background(Brush.linearGradient(listOf(Palette.SurfaceHigh, Palette.Surface)), RoundedCornerShape(20.dp))
             .border(1.dp, Color.White.copy(alpha = 0.07f), RoundedCornerShape(20.dp)).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -50,11 +51,15 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> 
 }
 
 @Composable
-fun Chip(text: String, color: Color) {
-    Text(
-        text, color = color, style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier.background(color.copy(alpha = 0.16f), RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 3.dp),
-    )
+fun Chip(text: String, color: Color, live: Boolean = false) {
+    Row(
+        Modifier.background(color.copy(alpha = 0.16f), RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 3.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (live) PulseDot(color)
+        Text(text, color = color, style = MaterialTheme.typography.labelMedium)
+    }
 }
 
 fun formatTime(ms: Long): String {

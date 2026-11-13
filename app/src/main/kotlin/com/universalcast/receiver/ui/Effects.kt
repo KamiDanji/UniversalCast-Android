@@ -9,6 +9,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -107,4 +110,32 @@ fun SplashOverlay(onDone: () -> Unit) {
             )
         }
     }
+}
+
+/** A small dot that gently pulses: marks something live (connected, nearby, connecting). */
+@Composable
+fun PulseDot(color: Color, size: androidx.compose.ui.unit.Dp = 8.dp) {
+    val t = rememberInfiniteTransition(label = "pulse")
+    val a by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "a")
+    Box(
+        Modifier.size(size)
+            .graphicsLayer { alpha = a; scaleX = 0.8f + 0.4f * a; scaleY = 0.8f + 0.4f * a }
+            .background(color, androidx.compose.foundation.shape.CircleShape),
+    )
+}
+
+/** Presses shrink the element slightly and spring back; observes touches without consuming them. */
+fun Modifier.pressScale(): Modifier = composed {
+    var pressed by remember { mutableStateOf(false) }
+    val s by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.5f, stiffness = 500f), label = "press")
+    this
+        .pointerInput(Unit) {
+            awaitPointerEventScope {
+                while (true) {
+                    val e = awaitPointerEvent(PointerEventPass.Initial)
+                    pressed = e.changes.any { it.pressed }
+                }
+            }
+        }
+        .graphicsLayer { scaleX = s; scaleY = s }
 }

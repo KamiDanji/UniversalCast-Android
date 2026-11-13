@@ -49,7 +49,7 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, o
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = onPair, containerColor = Palette.Accent, contentColor = Palette.OnAccent) {
+            ExtendedFloatingActionButton(onClick = onPair, modifier = Modifier.pressScale(), containerColor = Palette.Accent, contentColor = Palette.OnAccent) {
                 Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Pair a TV")
             }
         },
@@ -104,10 +104,10 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, o
                             Text(r.name, style = MaterialTheme.typography.titleMedium, color = Palette.Text)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Chip(r.role.lowercase().replaceFirstChar { it.uppercase() }, Palette.Accent)
-                                if (connectedHere) Chip("Connected", Palette.Ok) else if (isNearby) Chip("Nearby", Palette.Ok) else Chip("Not seen yet", Palette.TextDim)
+                                if (connectedHere) Chip("Connected", Palette.Ok, live = true) else if (isNearby) Chip("Nearby", Palette.Ok, live = true) else Chip("Not seen yet", Palette.TextDim)
                             }
                         }
-                        Button(onClick = { rt.connect(r); onOpenRemote() }) { Text(if (connectedHere) "Open" else "Connect") }
+                        Button(onClick = { rt.connect(r); onOpenRemote() }, modifier = Modifier.pressScale()) { Text(if (connectedHere) "Open" else "Connect") }
                         var menu by remember { mutableStateOf(false) }
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More", tint = Palette.TextDim) }
@@ -127,7 +127,7 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, o
                             Text("Play a video in the browser, cast what it plays.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
                         }
                         Spacer(Modifier.width(12.dp))
-                        FilledTonalButton(onClick = onBrowse) { Text("Browser") }
+                        FilledTonalButton(onClick = onBrowse, modifier = Modifier.pressScale()) { Text("Browser") }
                     }
                 }
             }

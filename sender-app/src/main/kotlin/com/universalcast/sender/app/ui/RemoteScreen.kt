@@ -43,8 +43,8 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                 navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 actions = {
                     when (st.phase) {
-                        ConnectionPhase.CONNECTED -> Chip(if (st.canControl) "Controller" else "Observer", Palette.Ok)
-                        ConnectionPhase.CONNECTING, ConnectionPhase.RECONNECTING -> Chip("Connecting…", Palette.Warn)
+                        ConnectionPhase.CONNECTED -> Chip(if (st.canControl) "Controller" else "Observer", Palette.Ok, live = true)
+                        ConnectionPhase.CONNECTING, ConnectionPhase.RECONNECTING -> Chip("Connecting…", Palette.Warn, live = true)
                         else -> Chip("Offline", Palette.Danger)
                     }
                     Spacer(Modifier.width(12.dp))

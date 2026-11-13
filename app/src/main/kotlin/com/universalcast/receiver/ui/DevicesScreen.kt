@@ -31,7 +31,7 @@ fun DevicesScreen(vm: AppViewModel, onBack: () -> Unit) {
                                     if (s.isRevoked) Chip("Revoked ${formatDate(s.revokedAtMs)}", Palette.Danger)
                                     else {
                                         Chip(s.role.name.lowercase().replaceFirstChar { it.uppercase() }, Palette.Accent)
-                                        if (connected.any { it.senderId == s.senderId }) Chip("Connected", Palette.Ok)
+                                        if (connected.any { it.senderId == s.senderId }) Chip("Connected", Palette.Ok, live = true)
                                     }
                                 }
                             }

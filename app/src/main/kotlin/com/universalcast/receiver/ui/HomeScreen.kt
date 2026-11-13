@@ -34,10 +34,10 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onDevices: () -> Unit, onSe
                 when {
                     error != null -> { Chip("Not running", Palette.Danger); Text(error!!, color = Palette.Danger, style = MaterialTheme.typography.bodyLarge) }
                     running -> {
-                        Chip("Ready · secure (TLS) · port ${rt.core.boundPort}", Palette.Ok)
+                        Chip("Ready · secure (TLS) · port ${rt.core.boundPort}", Palette.Ok, live = true)
                         if (rt.config.mode.wire == "development") { Spacer(Modifier.height(4.dp)); Chip("Development build", Palette.Warn) }
                     }
-                    else -> Chip("Starting…", Palette.Warn)
+                    else -> Chip("Starting…", Palette.Warn, live = true)
                 }
                 Spacer(Modifier.height(16.dp))
                 Text("${senders.count { !it.isRevoked }} paired device(s) · ${connected.size} connected", color = Palette.TextDim, style = MaterialTheme.typography.bodyLarge)
