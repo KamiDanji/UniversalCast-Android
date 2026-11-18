@@ -1,11 +1,14 @@
 package com.universalcast.security
 
+import java.net.InetAddress
 import java.net.Socket
 import java.security.SecureRandom
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
+import javax.net.SocketFactory
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLEngine
+import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
 import javax.net.ssl.X509ExtendedTrustManager
 
@@ -53,7 +56,30 @@ class PinnedTrustManager(expectedFingerprint: String) : X509ExtendedTrustManager
     override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
 }
 
-class PinnedTls(val sslContext: SSLContext, val trustManager: PinnedTrustManager)
+class PinnedTls(val sslContext: SSLContext, val trustManager: PinnedTrustManager) {
+    /**
+     * Returns an [SSLSocketFactory] that applies [soTimeoutMs] before the TLS handshake begins, so a host that
+     * accepts the TCP connection (or a half-set-up `adb reverse` tunnel) but never completes the TLS/WebSocket
+     * handshake cannot block `connectBlocking` forever.
+     */
+    fun socketFactoryWithTimeout(soTimeoutMs: Int): SocketFactory {
+        val delegate = sslContext.socketFactory
+        return object : SSLSocketFactory() {
+            private fun Socket.withTimeout(): Socket = apply { if (soTimeoutMs > 0 && soTimeout == 0) soTimeout = soTimeoutMs }
+            override fun getDefaultCipherSuites(): Array<String> = delegate.defaultCipherSuites
+            override fun getSupportedCipherSuites(): Array<String> = delegate.supportedCipherSuites
+            override fun createSocket(): Socket = delegate.createSocket().withTimeout()
+            override fun createSocket(s: Socket?, host: String?, port: Int, autoClose: Boolean): Socket =
+                delegate.createSocket(s, host, port, autoClose).withTimeout()
+            override fun createSocket(host: String?, port: Int): Socket = delegate.createSocket(host, port).withTimeout()
+            override fun createSocket(host: String?, port: Int, localHost: InetAddress?, localPort: Int): Socket =
+                delegate.createSocket(host, port, localHost, localPort).withTimeout()
+            override fun createSocket(host: InetAddress?, port: Int): Socket = delegate.createSocket(host, port).withTimeout()
+            override fun createSocket(address: InetAddress?, port: Int, localAddress: InetAddress?, localPort: Int): Socket =
+                delegate.createSocket(address, port, localAddress, localPort).withTimeout()
+        }
+    }
+}
 
 object TlsPinning {
     fun create(expectedFingerprint: String): PinnedTls {

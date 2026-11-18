@@ -378,6 +378,34 @@ class SenderTest {
         assertEquals(10_000, paused.estimatedPositionMs(50_000))
     }
 
+    @Test fun pairingSkipsBlackholeHostThatAcceptsTcpWithoutTlsHandshake() = withEnv { env ->
+        // Simulates an adb reverse tunnel (or firewall/proxy) that accepts the TCP connection on 127.0.0.1
+        // and holds the socket open without ever answering the TLS ClientHello.
+        val heldSockets = java.util.concurrent.CopyOnWriteArrayList<java.net.Socket>()
+        val blackhole = java.net.ServerSocket(0)
+        val acceptThread = Thread({
+            try {
+                while (!blackhole.isClosed) {
+                    heldSockets.add(blackhole.accept())
+                }
+            } catch (_: Exception) {}
+        }, "test-blackhole").apply { isDaemon = true; start() }
+        try {
+            val b = env.core.startPairing()
+            // Verify UcpClient itself times out promptly when a TCP peer accepts and hangs during TLS handshake.
+            val id = SoftwareSenderIdentity.generate()
+            val t0 = System.currentTimeMillis()
+            val hangClient = UcpClient(id, "127.0.0.1", blackhole.localPort, b.fingerprint)
+            assertFalse(hangClient.connect(timeoutMs = 700))
+            val elapsed = System.currentTimeMillis() - t0
+            assertTrue(elapsed < 4_000, "connectBlocking must not hang forever on silent TCP peer (took ${elapsed}ms)")
+        } finally {
+            runCatching { blackhole.close() }
+            heldSockets.forEach { runCatching { it.close() } }
+            acceptThread.join(1_000)
+        }
+    }
+
     // ---- receiver store -----------------------------------------------------------------------------------
 
     private val key = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()

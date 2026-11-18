@@ -90,7 +90,12 @@ class ReceiverRuntime(private val app: Context) {
         val extraAddresses = BuildConfig.EXTRA_PAIRING_ADDRESSES.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         core = ReceiverCore(
             identity, registry, engine, config, advertiser,
-            addressProvider = { (extraAddresses + NetworkAddresses.local()).distinct() },
+            addressProvider = {
+                val local = NetworkAddresses.local()
+                val v4 = local.filter { !it.contains(':') }
+                val v6 = local.filter { it.contains(':') }
+                (v4 + extraAddresses + v6).distinct()
+            },
             receiverName = { _name.value }, log = log,
         )
         core.pairing.addListener(object : PairingListener {

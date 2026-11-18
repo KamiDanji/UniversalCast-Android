@@ -79,7 +79,15 @@ class SenderRuntime(private val app: Context) {
 
     private fun defaultName() = (Build.MODEL ?: "Android phone").take(40)
 
-    fun newPairingSession(qr: String) = PairingSession(identity, deviceName.value, qr)
+    fun newPairingSession(qr: String): PairingSession {
+        val tempSession = PairingSession(identity, deviceName.value, qr)
+        val discovered = discovery.tvs.value.firstOrNull { it.deviceId != null && it.deviceId == tempSession.bootstrap.deviceId }
+        return if (discovered != null && discovered.hosts.isNotEmpty()) {
+            PairingSession(identity, deviceName.value, qr, preferredHosts = discovered.hosts)
+        } else {
+            tempSession
+        }
+    }
 
     fun onPaired(r: PairedReceiver) {
         store.save(r)

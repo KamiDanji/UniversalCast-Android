@@ -20,6 +20,7 @@ class PairingSession(
     private val identity: SenderIdentity,
     private val senderName: String,
     qrText: String,
+    private val preferredHosts: List<String> = emptyList(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     /** @throws IllegalArgumentException when the text is not a UniversalCast pairing code. */
@@ -28,16 +29,19 @@ class PairingSession(
     val receiverName: String get() = bootstrap.deviceName
 
     private var active: PairingClient? = null
+    private var connectedAddress: String? = null
 
     /** Connects (pinned to the QR's fingerprint), proves knowledge of the QR secret and returns the SAS to display. */
     fun begin(): String {
-        require(bootstrap.addresses.isNotEmpty()) { "The pairing code contains no address" }
+        val candidates = (preferredHosts + bootstrap.addresses).distinct()
+        require(candidates.isNotEmpty()) { "The pairing code contains no address" }
         var last: Exception? = null
-        for (addr in bootstrap.addresses.take(4)) {
+        for (addr in candidates.take(4)) {
             val pc = PairingClient(identity, bootstrap, senderName.take(64), addr, bootstrap.port)
             try {
                 val sas = pc.begin()
                 active = pc
+                connectedAddress = addr
                 return sas
             } catch (e: UcpClientException) {
                 pc.client.close()
@@ -71,10 +75,11 @@ class PairingSession(
                 "approved" -> if (!r.macValid) {
                     PairOutcome.Failed("The TV's approval could not be verified. Nothing was saved.")
                 } else {
+                    val savedAddrs = (listOfNotNull(connectedAddress) + preferredHosts + bootstrap.addresses).distinct().take(8)
                     PairOutcome.Approved(
                         PairedReceiver(
                             fingerprint = bootstrap.fingerprint, deviceId = bootstrap.deviceId, name = bootstrap.deviceName,
-                            addresses = bootstrap.addresses, port = bootstrap.port, path = bootstrap.path,
+                            addresses = savedAddrs, port = bootstrap.port, path = bootstrap.path,
                             role = r.role ?: "OBSERVER", pairedAtMs = clock(),
                         )
                     )

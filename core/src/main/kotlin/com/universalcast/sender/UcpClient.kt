@@ -72,8 +72,13 @@ class UcpClient(
     /** @return true when the TLS handshake (including the fingerprint pin) and WebSocket upgrade succeeded. */
     fun connect(timeoutMs: Long = 5_000, path: String = Ucp.WS_PATH): Boolean {
         val hostPart = if (host.contains(':')) "[$host]" else host
-        val client = object : WebSocketClient(URI("wss://$hostPart:$port$path")) {
-            override fun onOpen(handshakedata: ServerHandshake?) {}
+        val connectTimeoutInt = timeoutMs.coerceIn(500L, 60_000L).toInt()
+        val client = object : WebSocketClient(URI("wss://$hostPart:$port$path"), org.java_websocket.drafts.Draft_6455(), emptyMap(), connectTimeoutInt) {
+            override fun onOpen(handshakedata: ServerHandshake?) {
+                // Once the TLS + WebSocket handshake completes, switch the socket to a read timeout generous enough
+                // for long-lived event waits (e.g. pairing approval) and heartbeat pings.
+                runCatching { socket?.soTimeout = 0 }
+            }
             override fun onMessage(message: String) {
                 rawMessages.add(message)
                 while (rawMessages.size > RAW_HISTORY) rawMessages.removeAt(0)
@@ -109,15 +114,17 @@ class UcpClient(
                 lastError = ex
             }
         }
-        client.setSocketFactory(tls.sslContext.socketFactory)
+        client.setSocketFactory(tls.socketFactoryWithTimeout(connectTimeoutInt))
         client.connectionLostTimeout = 0
         ws = client
-        return client.connectBlocking(timeoutMs, TimeUnit.MILLISECONDS)
+        val connected = client.connectBlocking(timeoutMs, TimeUnit.MILLISECONDS)
+        if (!connected) runCatching { client.close() }
+        return connected
     }
 
     fun close() {
         try {
-            ws?.closeBlocking()
+            ws?.close()
         } catch (e: Exception) {
         }
     }
@@ -229,6 +236,7 @@ class PairingClient(
     private val senderName: String,
     host: String = bootstrap.addresses.firstOrNull() ?: throw IllegalArgumentException("No address in pairing code"),
     port: Int = bootstrap.port,
+    private val connectTimeoutMs: Long = 3_000,
 ) {
     val client = UcpClient(identity, host, port, bootstrap.fingerprint)
     private val ephemeral = EcKeys.generateKeyPair()
@@ -238,7 +246,7 @@ class PairingClient(
 
     /** Connects (pinned to the QR fingerprint), sends the proof, verifies the receiver and returns the SAS to display. */
     fun begin(): String {
-        if (!client.connect()) throw UcpClientException(null, "Could not establish a pinned secure connection")
+        if (!client.connect(connectTimeoutMs, bootstrap.path)) throw UcpClientException(null, "Could not establish a pinned secure connection")
         val senderEphemeral = ephemeral.public.encoded
         val senderNonce = SecureRandoms.bytes(32)
         val t0 = TranscriptInput(bootstrap.fingerprint, bootstrap.pairingId, identity.publicKeySpki, senderEphemeral, senderNonce)
