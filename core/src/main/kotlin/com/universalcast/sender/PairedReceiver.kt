@@ -27,7 +27,7 @@ data class PairedReceiver(
 object PairedReceiverJson {
     fun encode(r: PairedReceiver): String = StrictJson.stringify(
         linkedMapOf(
-            "fingerprint" to r.fingerprint, "deviceId" to r.deviceId, "name" to r.name, "addresses" to r.addresses,
+            "fingerprint" to r.fingerprint, "deviceId" to r.deviceId, "name" to r.name, "addresses" to r.addresses.take(8),
             "port" to r.port.toLong(), "path" to r.path, "role" to r.role, "pairedAtMs" to r.pairedAtMs, "lastConnectedAtMs" to r.lastConnectedAtMs,
         )
     )
@@ -44,7 +44,7 @@ object PairedReceiverJson {
                 fingerprint = fp,
                 deviceId = f.string("deviceId", 64),
                 name = f.string("name", 128),
-                addresses = f.stringList("addresses", 8, 64),
+                addresses = f.stringList("addresses", 64, 64).take(8),
                 port = f.long("port", 1, 65535).toInt(),
                 path = f.string("path", 64),
                 role = f.string("role", 16),

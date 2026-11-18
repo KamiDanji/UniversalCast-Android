@@ -58,6 +58,14 @@ class AdvertisementController(private val advertiser: ServiceAdvertiser) {
         current = ad
     }
 
+    /** Forces a fresh registration with the platform advertiser (e.g. after a network reconnect). */
+    @Synchronized
+    fun restart(ad: ServiceAdvertisement) {
+        if (advertiser.isAdvertising) advertiser.stop()
+        advertiser.start(ad)
+        current = ad
+    }
+
     @Synchronized
     fun stop() {
         if (advertiser.isAdvertising) advertiser.stop()

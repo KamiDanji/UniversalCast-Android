@@ -239,4 +239,34 @@ class PairingTest {
         assertEquals("Unknown device", PairingManager.sanitizeName("\u0001\u0002"))
         assertEquals(48, PairingManager.sanitizeName("x".repeat(200)).length)
     }
+
+    @Test fun manyIpv6AddressesDoNotBreakPairingQrGenerationOrParsing() {
+        val manyAddrs = listOf("192.168.2.11") + (1..12).map { "2a02:a44e:d815:0:54b1:3c6b:57eb:${it.toString(16)}" }
+        val multiMgr = PairingManager(receiver, registry, time, { manyAddrs }, { 8765 }, { "BRAVIA 4K UR3" })
+        val b = multiMgr.startPairing()
+        assertEquals(PairingBootstrap.MAX_QR_ADDRESSES, b.addresses.size)
+        assertEquals("192.168.2.11", b.addresses.first())
+        val parsed = PairingBootstrap.parse(b.toUri())
+        assertEquals(b.addresses, parsed.addresses)
+
+        // Legacy QR payloads from older receiver builds that embedded >8 addresses must also parse cleanly.
+        val legacyJson = StrictJson.stringify(
+            linkedMapOf(
+                "v" to Ucp.VERSION,
+                "id" to b.deviceId,
+                "name" to b.deviceName,
+                "fp" to b.fingerprint,
+                "pid" to b.pairingId,
+                "sec" to Bytes.b64(b.secret),
+                "exp" to b.expiresAtMs,
+                "addr" to manyAddrs,
+                "port" to b.port,
+                "path" to b.path,
+            )
+        )
+        val legacyUri = PairingBootstrap.PREFIX + Bytes.b64(legacyJson.toByteArray(Charsets.UTF_8))
+        val parsedLegacy = PairingBootstrap.parse(legacyUri)
+        assertEquals(PairingBootstrap.MAX_ADDRESSES, parsedLegacy.addresses.size)
+        assertEquals("192.168.2.11", parsedLegacy.addresses.first())
+    }
 }

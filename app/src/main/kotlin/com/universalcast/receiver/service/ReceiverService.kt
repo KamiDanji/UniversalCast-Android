@@ -146,7 +146,7 @@ class ReceiverService : Service() {
         val cb = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 // The address list in the QR code is computed on demand; mDNS may need re-announcing.
-                runtime.core.advertise()
+                runtime.core.readvertise()
             }
         }
         callback = cb

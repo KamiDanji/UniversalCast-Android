@@ -37,12 +37,18 @@ class NsdAdvertiser(private val nsd: NsdManager, private val log: DiagnosticsLog
             }
 
             override fun onRegistrationFailed(i: NsdServiceInfo, errorCode: Int) {
-                registered = false
+                synchronized(this@NsdAdvertiser) {
+                    if (listener === this) listener = null
+                    registered = false
+                }
                 log.error("mDNS registration failed (code $errorCode)")
             }
 
             override fun onServiceUnregistered(i: NsdServiceInfo) {
-                registered = false
+                synchronized(this@NsdAdvertiser) {
+                    if (listener === this) listener = null
+                    registered = false
+                }
                 log.info("mDNS unregistered")
             }
 

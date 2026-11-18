@@ -57,15 +57,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun startPairing(qr: String) {
         resetPairing()
+        val s = try {
+            rt.newPairingSession(qr)
+        } catch (e: IllegalArgumentException) {
+            _stage.value = PairStage.Error("That is not a UniversalCast pairing code. On the TV choose “Pair a new device” and scan the QR code shown there.")
+            return
+        }
+        session = s
         _stage.value = PairStage.Connecting
         job = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val s = rt.newPairingSession(qr)
-                session = s
                 val sas = s.begin()
                 _stage.value = PairStage.Compare(sas, s.receiverName)
-            } catch (e: IllegalArgumentException) {
-                _stage.value = PairStage.Error("That is not a UniversalCast pairing code. On the TV choose “Pair a new device” and scan the QR code shown there.")
             } catch (e: Exception) {
                 _stage.value = PairStage.Error(friendly(e))
             }

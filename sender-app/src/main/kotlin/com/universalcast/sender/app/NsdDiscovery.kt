@@ -3,6 +3,8 @@ package com.universalcast.sender.app
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,12 +17,14 @@ data class DiscoveredTv(val serviceName: String, val deviceId: String?, val host
 
 /** Browses `_universalcast._tcp` and resolves each service (one at a time: NSD only allows one active resolve). */
 class NsdDiscovery(context: Context) {
-    private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
+    private val appContext = context.applicationContext
+    private val nsd = appContext.getSystemService(Context.NSD_SERVICE) as NsdManager
     private val main = Handler(Looper.getMainLooper())
     private val found = LinkedHashMap<String, DiscoveredTv>()
     private val queue = ArrayDeque<NsdServiceInfo>()
     private var resolving = false
     private var listener: NsdManager.DiscoveryListener? = null
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     private val _tvs = MutableStateFlow<List<DiscoveredTv>>(emptyList())
     val tvs: StateFlow<List<DiscoveredTv>> = _tvs.asStateFlow()
@@ -29,6 +33,11 @@ class NsdDiscovery(context: Context) {
 
     fun start() = main.post {
         if (listener != null) return@post
+        runCatching {
+            val wifi = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val lock = multicastLock ?: wifi?.createMulticastLock("ucp-sender-mdns")?.apply { setReferenceCounted(false) }.also { multicastLock = it }
+            lock?.acquire()
+        }
         val l = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(serviceType: String) {}
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) { listener = null }
@@ -57,6 +66,7 @@ class NsdDiscovery(context: Context) {
             nsd.stopServiceDiscovery(l)
         } catch (e: Exception) {
         }
+        runCatching { multicastLock?.takeIf { it.isHeld }?.release() }
         found.clear()
         publish()
     }
@@ -78,7 +88,16 @@ class NsdDiscovery(context: Context) {
                 override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
                     main.post {
                         resolving = false
-                        toTv(serviceInfo)?.let { found[serviceInfo.serviceName] = it; publish() }
+                        toTv(serviceInfo)?.let { tv ->
+                            val prev = found[serviceInfo.serviceName]
+                            val merged = if (prev == null) tv else {
+                                val combined = (tv.hosts + prev.hosts).distinct()
+                                val (v6, v4) = combined.partition { it.contains(':') }
+                                tv.copy(hosts = v4 + v6)
+                            }
+                            found[serviceInfo.serviceName] = merged
+                            publish()
+                        }
                         resolveNext()
                     }
                 }
@@ -90,14 +109,25 @@ class NsdDiscovery(context: Context) {
 
     @Suppress("DEPRECATION")
     private fun toTv(i: NsdServiceInfo): DiscoveredTv? {
-        val addr = i.host ?: return null
-        val ip = addr.hostAddress?.substringBefore('%') ?: return null
-        // Link-local IPv6 addresses need an interface scope and are never advertised in pairing codes either.
-        if (addr is Inet6Address && (addr.isLinkLocalAddress || addr.isLoopbackAddress)) return null
+        val addrs = if (Build.VERSION.SDK_INT >= 34) {
+            i.hostAddresses.ifEmpty { listOfNotNull(i.host) }
+        } else {
+            listOfNotNull(i.host)
+        }
+        val v4 = ArrayList<String>()
+        val v6 = ArrayList<String>()
+        for (addr in addrs) {
+            // Link-local IPv6 addresses need an interface scope and are never advertised in pairing codes either.
+            if (addr.isLoopbackAddress || addr.isLinkLocalAddress || addr.isAnyLocalAddress) continue
+            val ip = addr.hostAddress?.substringBefore('%') ?: continue
+            if (addr is Inet6Address) v6.add(ip) else v4.add(ip)
+        }
+        val hosts = (v4 + v6).distinct()
+        if (hosts.isEmpty()) return null
         val attrs = i.attributes
         fun txt(k: String) = attrs?.get(k)?.let { String(it, Charsets.UTF_8) }
         if (txt("tls") != "1") return null // only ever consider the secure endpoint
-        return DiscoveredTv(i.serviceName, txt("id"), listOf(ip), i.port, txt("mode"))
+        return DiscoveredTv(i.serviceName, txt("id"), hosts, i.port, txt("mode"))
     }
 
     companion object {

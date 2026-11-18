@@ -123,6 +123,18 @@ class ReceiverCore(
         }
     }
 
+    /** Forces mDNS re-registration (e.g. when the network interface reconnects after standby). */
+    @Synchronized
+    fun readvertise() {
+        val ctl = advertisement ?: return
+        if (!isRunning) return
+        try {
+            ctl.restart(DiscoveryRecords.forReceiver(identity, config, receiverName(), boundPort))
+        } catch (e: Exception) {
+            log.error("Service advertisement failed", e)
+        }
+    }
+
     @Synchronized
     fun stop() {
         if (!isRunning) return

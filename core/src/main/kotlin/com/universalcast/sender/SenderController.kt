@@ -97,13 +97,16 @@ class SenderController(
     // ---- public API --------------------------------------------------------------------------------------
 
     /** Connects to [receiver]. [preferredHosts] (e.g. from mDNS) are tried before the stored addresses. */
-    fun connect(receiver: PairedReceiver, preferredHosts: List<String> = emptyList()) = submit {
-        cancelReconnect()
-        dropClient()
-        target = receiver
-        this.preferredHosts = preferredHosts
-        wantConnected = true
-        attemptConnect(0, reconnecting = false)
+    fun connect(receiver: PairedReceiver, preferredHosts: List<String> = emptyList()) {
+        update { it.copy(phase = ConnectionPhase.CONNECTING, receiver = receiver, failure = null, message = null) }
+        submit {
+            cancelReconnect()
+            dropClient()
+            target = receiver
+            this.preferredHosts = preferredHosts
+            wantConnected = true
+            attemptConnect(0, reconnecting = false)
+        }
     }
 
     fun disconnect() = submit {
@@ -217,7 +220,9 @@ class SenderController(
                     continue
                 }
                 val info = c.authenticate()
-                attach(c, r, info.role)
+                val updated = r.copy(addresses = (listOf(host) + r.addresses).distinct().take(8))
+                target = updated
+                attach(c, updated, info.role)
                 return
             } catch (e: UcpClientException) {
                 System.err.println("UCP auth with $host:${r.port} failed: ${e.code} ${e.message}")

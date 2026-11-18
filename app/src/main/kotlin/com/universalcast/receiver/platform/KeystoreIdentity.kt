@@ -51,7 +51,11 @@ class KeystoreIdentityProvider(
         if (key == null || cert == null) {
             null
         } else {
-            cert.checkValidity(Date(now()))
+            try {
+                cert.checkValidity(Date(now()))
+            } catch (_: java.security.cert.CertificateNotYetValidException) {
+                // TVs often cold-boot before NTP syncs the clock; never wipe the identity key for an unsynced clock.
+            }
             // validates curve + on-curve; rejects anything but a P-256 key
             EcKeys.decodePublicKey(cert.publicKey.encoded)
             check(cert.publicKey.algorithm == "EC")
@@ -62,7 +66,7 @@ class KeystoreIdentityProvider(
     }
 
     private fun generate() {
-        val start = Date(now() - 24L * 3600_000)
+        val start = Date(0L)
         val end = Date(now() + 20L * 365 * 24 * 3600_000)
         val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
             .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))

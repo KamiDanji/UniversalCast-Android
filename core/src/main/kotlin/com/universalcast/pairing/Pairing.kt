@@ -44,7 +44,7 @@ class PairingBootstrap(
                 "pid" to pairingId,
                 "sec" to Bytes.b64(secret),
                 "exp" to expiresAtMs,
-                "addr" to addresses,
+                "addr" to addresses.take(MAX_ADDRESSES),
                 "port" to port,
                 "path" to path,
             )
@@ -54,6 +54,9 @@ class PairingBootstrap(
 
     companion object {
         const val PREFIX = "ucp://pair?d="
+        const val MAX_QR_ADDRESSES = 4
+        const val MAX_ADDRESSES = 8
+        private const val MAX_PARSED_ADDRESSES = 64
 
         /** Parses the text a sender scanned from the QR code. @throws IllegalArgumentException when invalid. */
         fun parse(uri: String): PairingBootstrap {
@@ -74,7 +77,7 @@ class PairingBootstrap(
                     pairingId = pid,
                     secret = f.bytes("sec", exactLength = 32),
                     expiresAtMs = f.long("exp", 0, Long.MAX_VALUE),
-                    addresses = f.stringList("addr", 8, 64),
+                    addresses = f.stringList("addr", MAX_PARSED_ADDRESSES, 64).take(MAX_ADDRESSES),
                     port = f.long("port", 1, 65535).toInt(),
                     path = f.string("path", 64),
                 )
@@ -275,7 +278,7 @@ class PairingManager(
             pairingId = Bytes.b64(SecureRandoms.bytes(16)),
             secret = SecureRandoms.bytes(32),
             expiresAtMs = now + windowMs,
-            addresses = addresses(),
+            addresses = addresses().take(PairingBootstrap.MAX_QR_ADDRESSES),
             port = port(),
         )
         active = Active(bootstrap, bootstrap.toUri())
