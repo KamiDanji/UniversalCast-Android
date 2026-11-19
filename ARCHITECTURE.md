@@ -76,6 +76,8 @@ tested end-to-end against the real receiver:
   with EasyList, uBlock Origin (filters/badware/unbreak), and Peter Lowe's list downloaded over HTTPS every 3 days,
   indexed by host/token, plus cosmetic CSS injection (`cosmeticCss`) while never blocking castable media URLs.
 
+Local media: `RemoteScreen` uses the system Photo Picker (`PickMultipleVisualMedia`, which also lists Google Photos cloud media) and the document picker (`OpenMultipleDocuments`); `MainActivity` also accepts `ACTION_SEND` / `ACTION_SEND_MULTIPLE` for `image/*`, `video/*`, `audio/*` (into `AppViewModel.pendingLocalUris`, shown as a Home banner and cast by the remote as soon as a controller connection exists). Each URI is served to the TV through `ContentUriMediaSource` + `MediaProxyServer`.
+
 Browser persistence (`web/BrowserStateStore.kt`): the WebView's `saveState` bundle (back/forward list + scroll) and last URL are written to private storage after each finished page and when the app pauses; `BrowserScreen` restores them (falling back to reloading the URL), and `MainActivity` reopens the browser on cold start if it was the last screen (not when launched by a share).
 
 Cast browser (`sender-app/.../web/BrowserScreen.kt`): a hardened WebView. `shouldInterceptRequest` (plus a

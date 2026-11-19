@@ -33,6 +33,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val pendingUrl: StateFlow<String?> = _pendingUrl.asStateFlow()
     fun setPendingUrl(url: String?) { _pendingUrl.value = url }
 
+    /** Photos / videos / audio shared into the app (Gallery, Google Photos, files), cast as soon as a TV is connected. */
+    val pendingLocalUris = MutableStateFlow<List<android.net.Uri>>(emptyList())
+
+    /** Set when shared media should open the remote straight away (a TV is already connected). */
+    val openRemoteRequest = MutableStateFlow(false)
+
     /** Page open in the cast browser (restored when coming back to it); a shared web page lands here too. */
     val browserUrl = MutableStateFlow<String?>(null)
 

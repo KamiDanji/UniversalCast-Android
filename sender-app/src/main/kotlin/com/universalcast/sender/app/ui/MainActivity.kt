@@ -39,11 +39,13 @@ class MainActivity : ComponentActivity() {
                 UpdatePrompt((application as SenderApp).updates)
                 // Cold start: go back to the browser if that is where the app was left (not when launched by a share).
                 var screen by rememberSaveable {
-                    mutableStateOf(if (intent?.action != Intent.ACTION_SEND && BrowserStateStore.wasOpen(this@MainActivity)) Screen.BROWSER else Screen.HOME)
+                    mutableStateOf(if (intent?.action != Intent.ACTION_SEND && intent?.action != Intent.ACTION_SEND_MULTIPLE && BrowserStateStore.wasOpen(this@MainActivity)) Screen.BROWSER else Screen.HOME)
                 }
                 LaunchedEffect(screen) { BrowserStateStore.setOpen(this@MainActivity, screen == Screen.BROWSER) }
                 val openBrowser by vm.openBrowserRequest.collectAsState()
                 LaunchedEffect(openBrowser) { if (openBrowser) { screen = Screen.BROWSER; vm.openBrowserRequest.value = false } }
+                val openRemote by vm.openRemoteRequest.collectAsState()
+                LaunchedEffect(openRemote) { if (openRemote) { screen = Screen.REMOTE; vm.openRemoteRequest.value = false } }
                 // The browser handles Back itself (page history first).
                 BackHandler(enabled = screen != Screen.HOME && screen != Screen.BROWSER) { screen = Screen.HOME }
                 AnimatedContent(
@@ -80,6 +82,17 @@ class MainActivity : ComponentActivity() {
 
     /** "Share" → UniversalCast: a stream link goes to the remote; a web page opens in the cast browser. */
     private fun handleShare(i: Intent?) {
+        // Photos, videos and audio from Gallery / Google Photos / a file manager.
+        if (i?.action == Intent.ACTION_SEND || i?.action == Intent.ACTION_SEND_MULTIPLE) {
+            val uris = sharedMediaUris(i)
+            if (uris.isNotEmpty()) {
+                vm.pendingLocalUris.value = uris
+                // Already connected: go straight to the remote (it casts them). Otherwise Home asks which TV.
+                val s = vm.rt.state.value
+                if (s.phase == com.universalcast.sender.ConnectionPhase.CONNECTED && s.canControl) vm.openRemoteRequest.value = true
+                return
+            }
+        }
         if (i?.action == Intent.ACTION_SEND && i.type == "text/plain") {
             val url = Links.extractHttpUrl(i.getStringExtra(Intent.EXTRA_TEXT)) ?: return
             if (MediaSniffer.classify(url).castable) {
@@ -89,6 +102,17 @@ class MainActivity : ComponentActivity() {
                 vm.openBrowserRequest.value = true
             }
         }
+    }
+
+    private fun sharedMediaUris(i: Intent): List<android.net.Uri> {
+        val list = if (i.action == Intent.ACTION_SEND_MULTIPLE) {
+            androidx.core.content.IntentCompat.getParcelableArrayListExtra(i, Intent.EXTRA_STREAM, android.net.Uri::class.java).orEmpty()
+        } else {
+            listOfNotNull(androidx.core.content.IntentCompat.getParcelableExtra(i, Intent.EXTRA_STREAM, android.net.Uri::class.java))
+        }
+        // Some apps only put the items in ClipData.
+        val clip = i.clipData?.let { c -> (0 until c.itemCount).mapNotNull { c.getItemAt(it).uri } }.orEmpty()
+        return (list + clip).distinct()
     }
 
     override fun onStart() {

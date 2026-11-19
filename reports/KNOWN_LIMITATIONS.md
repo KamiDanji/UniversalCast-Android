@@ -77,3 +77,4 @@
 
 ## 1.2.2
 - The browser restores its page, history and scroll position, but not page state held by JavaScript, playing video position, form input or open pop-ups; if a WebView update makes the saved state unreadable, it just reloads the last URL.
+- Gallery / Google Photos casting was tested on an emulator with the system Photo Picker and shared `content://` media items; the Google Photos and Gallery apps themselves, and cloud-only Google Photos items, were not available there. A shared item is readable only while UniversalCast stays open in the background (Android ties the access to the app session); photos picked with the Photo Picker are readable until the app process ends.

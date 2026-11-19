@@ -86,6 +86,8 @@ Use debug builds (`com.universalcast.receiver.debug`, `com.universalcast.sender.
 34. Phone *Appearance*: the *Expressive* theme and the Light/Dark/System modes apply immediately; **Pure black (OLED)** turns the dark-mode background and base surfaces to true black (cards stay slightly lighter) with any colour theme, including Wallpaper.
 35. TV not showing the phone remote outside UniversalCast: Home shows **Turn on phone remote for all apps**; press it (Accessibility screen opens, or it enables itself if `WRITE_SECURE_SETTINGS` was granted), then from the phone remote D-pad / OK / Back / Home must work on the TV launcher and in other apps.
 36. Phone browser: open a site, scroll, close the app completely (swipe it away), reopen: the browser is back on the same page and scroll position and Back still walks through the earlier pages. Choose **Home** (arrow) first and reopen: the app starts on Home but the browser resumes the same page when opened.
+37. Phone Remote → **Photos & Videos**: pick several photos/videos from Gallery and from **Google Photos** (cloud items too): the first plays on the TV, the rest are queued; with **Add to queue instead of playing now** on, all are queued. **Music & files** still lists audio and other files.
+38. In **Google Photos** and **Gallery**: Share → UniversalCast with one or several photos/videos. Connected: the remote opens and casts them; not connected: Home shows "N items ready to cast", tap a TV and they play.
 
 ## Known limits (stated in the UI/docs)
 - DRM (Widevine/FairPlay/PlayReady, SAMPLE-AES) can't be cast by any method here.

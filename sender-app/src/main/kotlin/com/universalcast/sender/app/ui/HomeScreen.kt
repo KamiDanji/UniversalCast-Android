@@ -32,6 +32,7 @@ fun HomeScreen(
     val notice by rt.notice.collectAsState()
     val name by rt.deviceName.collectAsState()
     val pending by vm.pendingUrl.collectAsState()
+    val pendingMedia by vm.pendingLocalUris.collectAsState()
     var forgetting by remember { mutableStateOf<PairedReceiver?>(null) }
     var renaming by remember { mutableStateOf(false) }
     var appearance by remember { mutableStateOf(false) }
@@ -88,7 +89,7 @@ fun HomeScreen(
         ) {
             notice?.let { n ->
                 item {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer)) {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer, contentColor = MaterialTheme.colorScheme.onTertiaryContainer)) {
                         Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Info, null)
                             Text(n, Modifier.weight(1f).padding(horizontal = 12.dp), style = MaterialTheme.typography.bodyMedium)
@@ -97,9 +98,20 @@ fun HomeScreen(
                     }
                 }
             }
+            if (pendingMedia.isNotEmpty()) {
+                item {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${pendingMedia.size} item${if (pendingMedia.size == 1) "" else "s"} ready to cast", style = MaterialTheme.typography.titleSmall)
+                            Text("Tap a TV below and they play right away.", style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { vm.pendingLocalUris.value = emptyList() }) { Text("Discard") }
+                        }
+                    }
+                }
+            }
             pending?.let { url ->
                 item {
-                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer, contentColor = MaterialTheme.colorScheme.onPrimaryContainer)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Link ready to cast", style = MaterialTheme.typography.titleSmall)
                             Text(url, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)

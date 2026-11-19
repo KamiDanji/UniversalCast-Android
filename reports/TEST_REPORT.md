@@ -53,3 +53,4 @@ Run on a Pixel 8 virtual device (API 36) and an Android TV 1080p virtual device;
 - TV debug + signed release build: launch, splash, Home, pairing QR, Settings: no crashes; D-pad navigation worked.
 - Not exercised: camera QR scan, real phone-to-TV casting, Media3 playback of real streams, in-place self-update.
 - 1.2.2: TV emulator (Android 16): with the Accessibility service on and UniversalCast in the background, simulated phone D-pad keys moved focus in the TV launcher (debug-only `DebugKeyReceiver` drives `TvRemoteDispatcher`). Phone emulator: browser opened a page, scrolled, app force-stopped and cold-started: reopened on the same page at the same scroll position.
+- 1.2.2: phone emulator: *Photos & Videos* (system Photo Picker) with two photos: first cast, second queued; `ACTION_SEND` of an image from the shell while connected (remote opened and cast it) and while not connected (Home banner, then cast on opening the remote).

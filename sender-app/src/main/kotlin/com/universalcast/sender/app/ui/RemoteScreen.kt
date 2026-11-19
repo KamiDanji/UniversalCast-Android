@@ -56,12 +56,22 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
     var showSubtitleStyle by remember { mutableStateOf(false) }
     var enqueueNextLocalFile by remember { mutableStateOf(false) }
 
-    val localFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) {
-            uris.forEachIndexed { idx, uri ->
-                val asQueue = enqueueNextLocalFile || idx > 0
-                rt.castLocalUri(uri, enqueue = asQueue)
-            }
+    fun castPicked(uris: List<android.net.Uri>) {
+        uris.forEachIndexed { idx, uri -> rt.castLocalUri(uri, enqueue = enqueueNextLocalFile || idx > 0) }
+        if (uris.isNotEmpty()) enqueueNextLocalFile = false
+    }
+    // Gallery + Google Photos (the system Photo Picker also shows cloud photos) ...
+    val photoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(50)) { uris -> castPicked(uris) }
+    // ... and the file picker for music and anything else.
+    val localFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> castPicked(uris) }
+
+    // Photos / videos shared into the app: cast them as soon as this TV is ready (the first plays now, the rest are queued).
+    val sharedMedia by vm.pendingLocalUris.collectAsState()
+    LaunchedEffect(sharedMedia, st.phase, st.canControl) {
+        if (sharedMedia.isNotEmpty() && st.phase == ConnectionPhase.CONNECTED && st.canControl) {
+            val items = sharedMedia
+            vm.pendingLocalUris.value = emptyList()
+            items.forEachIndexed { idx, uri -> rt.castLocalUri(uri, enqueue = idx > 0) }
         }
     }
 
@@ -447,23 +457,23 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                         Text("Cast from a website or phone storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                         Text("Find streams on any website with the built-in ad-blocking browser, or pick local videos, music or photos from your phone.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         Button(onClick = onBrowse, enabled = st.canControl, modifier = Modifier.fillMaxWidth()) { Text("Find a video on a website") }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(
-                                onClick = {
-                                    enqueueNextLocalFile = false
-                                    localFileLauncher.launch(arrayOf("video/*", "audio/*", "image/*"))
-                                },
+                                onClick = { photoLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
                                 enabled = st.canControl,
-                                modifier = Modifier.weight(1f),
-                            ) { Text("Cast Videos / Music / Photos") }
-                            OutlinedButton(
-                                onClick = {
-                                    enqueueNextLocalFile = true
-                                    localFileLauncher.launch(arrayOf("video/*", "audio/*", "image/*"))
-                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Icon(Icons.Filled.PhotoLibrary, null); Spacer(Modifier.width(8.dp)); Text("Photos & Videos") }
+                            FilledTonalButton(
+                                onClick = { localFileLauncher.launch(arrayOf("video/*", "audio/*", "image/*")) },
                                 enabled = st.canControl,
-                            ) { Text("+ Queue") }
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Icon(Icons.Filled.FolderOpen, null); Spacer(Modifier.width(8.dp)); Text("Music & files") }
                         }
+                        FilterChip(
+                            selected = enqueueNextLocalFile, onClick = { enqueueNextLocalFile = !enqueueNextLocalFile },
+                            enabled = st.canControl, label = { Text("Add to queue instead of playing now") },
+                        )
+                        Text("Photos & Videos shows your Gallery and Google Photos. You can also share photos or videos from those apps straight to UniversalCast.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
 
                     // --- cast a link -----------------------------------------------------------------------
