@@ -1,6 +1,6 @@
 # Test report
 
-Verified at version **1.2.1** (`versionCode=15`).
+Verified at version **1.2.2** (`versionCode=16`).
 
 Command (Windows, JDK 21, Gradle 9.7.1, AGP 9.1.1, Kotlin 2.3.21, `--rerun-tasks`):
 `.\gradlew.bat :core:test :app:testDebugUnitTest :sender-app:testDebugUnitTest :updater:testDebugUnitTest --rerun-tasks`
@@ -52,3 +52,4 @@ Run on a Pixel 8 virtual device (API 36) and an Android TV 1080p virtual device;
 - Phone debug + signed **release (R8-minified)** build: launch, splash, Home, Appearance sheet (modes, colour themes, Pure black), About, Dummy-TV remote (playback controls, tracks, queue), light/dark mode: no crashes in logcat.
 - TV debug + signed release build: launch, splash, Home, pairing QR, Settings: no crashes; D-pad navigation worked.
 - Not exercised: camera QR scan, real phone-to-TV casting, Media3 playback of real streams, in-place self-update.
+- 1.2.2: TV emulator (Android 16): with the Accessibility service on and UniversalCast in the background, simulated phone D-pad keys moved focus in the TV launcher (debug-only `DebugKeyReceiver` drives `TvRemoteDispatcher`). Phone emulator: browser opened a page, scrolled, app force-stopped and cold-started: reopened on the same page at the same scroll position.

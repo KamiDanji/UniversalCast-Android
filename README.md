@@ -1,4 +1,4 @@
-# UniversalCast Receiver (Android TV) — v1.2.1
+# UniversalCast Receiver (Android TV) — v1.2.2
 
 Secure Android TV receiver and companion phone sender for the **UniversalCast Protocol (UCP) 1.0**. A paired sender (phone, tablet, PC…)
 discovers the TV via mDNS, connects over pinned TLS WebSocket, authenticates with a signed challenge and then
@@ -44,6 +44,7 @@ What still needs a device is listed in `reports/FEATURE_REPORT.md` with a manual
 - **Up Next Queue & Auto-Play**: enqueue multiple videos, music tracks, photos, or website streams (`+ Queue`), reorder/jump/skip/remove items, with automatic advancement when an item ends.
 - **Media Notification & Lock Screen Controls**: Android `MediaSession` notification with lock-screen transport controls, live seek bar, and hardware volume button control while casting (`VolumeProvider`).
 - **Resume History & Bookmarks**: automatically remembers playback positions for 1-tap resume, plus bookmarks and recent video pages in the Cast Browser.
+- **Browser remembers where you left off**: the page, its back/forward history and scroll position are saved, and after closing the app it reopens on the browser at the same spot (a shared link or the history "Page" button opens that page instead).
 - **Browser** (Home → Browser, or share a web page into the app): for sites without a Cast button. Play the video,
   tap "▶ N videos found – Cast", pick the stream and subtitles, cast or add to queue. Includes **Phone Proxy Mode** to tunnel IP-locked / HTTP 403 HLS & MP4 streams through the phone's WebView session (plus a 1-tap **"Retry via Phone Proxy"** action on 401/403 errors).
   Ad blocker combines the built-in domain list (`AdBlocker`) with cached uBlock/EasyList filter lists + cosmetic CSS hiding (`FilterEngine` / `FilterLists`), manages bookmarks, keeps pop-ups and "new tab" links inside the browser, ← only goes back, Back twice closes.
@@ -56,7 +57,7 @@ What still needs a device is listed in `reports/FEATURE_REPORT.md` with a manual
 - Clean player: video, customizable subtitles, **Real-Time Subtitle Sync** (Media3 `TextRenderer` timestamp-shift proxy for ±0.5 s adjustments), **Full-Screen Photo Slideshows** (8-second timer for queued photos), **On-TV Audio Visualizer** for audio-only streams, **Aspect Ratio / Zoom Modes**, **Sleep Timer**, a buffering spinner, optional 2-second floating OSD status pills (for volume, speed, seek, aspect ratio, sleep timer, keyboard input, and track switches), and error messages; no on-screen controls (the phone is the remote). Back stops playback; the remote's play/pause key toggles playback.
 - **Ambient Clock Screen**: sleek idle screen with burn-in-shifted live digital clock, date, receiver status badge and connected phones (auto-enters after 3 minutes of inactivity on Home when enabled).
 - **Subtitle Styling**: customize subtitle size, background opacity and bottom margin in TV Settings or live from the phone.
-- **Phone Remote Support**: responds to D-pad, OK, Back, Home, Media, Volume, and Keyboard text (`remote.text`) sent from the phone (works in-app, via clipboard/virtual keys, and for system volume out of the box; works system-wide across all TV apps when the optional `TvRemoteAccessibilityService` is enabled).
+- **Phone Remote Support**: responds to D-pad, OK, Back, Home, Media, Volume, and Keyboard text (`remote.text`) sent from the phone (works in-app, via clipboard/virtual keys, and for system volume out of the box; works system-wide across all TV apps when the optional `TvRemoteAccessibilityService` is enabled; the TV Home screen offers a one-press **Turn on phone remote for all apps** button while it is off).
 - **GitHub Releases Auto-Updater**: checks for new receiver releases on start / in Settings with formatted Markdown release notes.
 - Starts when the TV turns on (setting, default on) and comes to the front when a phone casts (needs "Display over other apps"; see BUILD.md), then goes back to what the TV showed when playback ends.
 

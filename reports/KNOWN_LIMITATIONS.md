@@ -26,7 +26,7 @@
     `PlayerScreen.kt` to ignore those keys.
 15. In-app navigation (`KeyEvent`s), keyboard typing (`KeyCharacterMap` + clipboard), and TV system volume (`AudioManager`)
     work out of the box when connected. System-wide D-pad/Back/Home across *other* Android TV apps requires manually
-    enabling **UniversalCast Phone Remote** in Android TV Accessibility Settings (and API 33+ for global D-pad actions).
+    enabling **UniversalCast Phone Remote** (Home → *Turn on phone remote for all apps*, or Android TV Accessibility Settings). API 33+ uses the system D-pad actions; older TVs use accessibility focus navigation (less exact than a real D-pad in apps that draw their own focus). Verified only on an Android 16 TV emulator. On TVs that hide the Accessibility screen, run once `adb shell pm grant com.universalcast.receiver android.permission.WRITE_SECURE_SETTINGS` and press *Turn on*.
 
 ## Browser casting
 16. By default the TV fetches streams directly. For streams whose token is bound to the phone's IP or that fail with
@@ -74,3 +74,6 @@
 - The TV app's minimum Android version is now **7.0 (API 24)** because current Compose requires it (was 6.0).
 - Media3 stays at 1.3.1 on purpose (the subtitle-offset renderer proxy depends on its internals); upgrading it is a separate task.
 - Material 3 Expressive on the phone covers the theme, motion, header, shape badges, loading/progress indicators, buttons and the splash; the rest of the screens use standard Material 3 components that pick up the expressive theme automatically.
+
+## 1.2.2
+- The browser restores its page, history and scroll position, but not page state held by JavaScript, playing video position, form input or open pop-ups; if a WebView update makes the saved state unreadable, it just reloads the last URL.

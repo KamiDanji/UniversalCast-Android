@@ -105,9 +105,11 @@ types, and timestamps — request headers, cookies, and ephemeral `/local/` or `
   transparent, non-focusable, non-touchable overlay window. That window never takes input or focus. The activity is
   only brought to the front after an authenticated Controller started playback.
 - Optional `TvRemoteAccessibilityService` (for system-wide phone D-pad/Back/Home navigation outside UniversalCast) is
-  explicitly opt-in via Android TV Accessibility Settings, declares `canRetrieveWindowContent="false"` and
-  `canPerformGestures="false"`, and only triggers global navigation actions on authenticated Controller `remote.key`
-  requests.
+  explicitly opt-in via Android TV Accessibility Settings (or `adb shell pm grant … WRITE_SECURE_SETTINGS` once, after which the app can switch it on itself), declares `canPerformGestures="false"`, and only acts on authenticated Controller
+  `remote.key` requests. On Android 13+ it declares `canRetrieveWindowContent="false"` and uses the system D-pad global actions; on older TVs
+  (`res/xml`, API < 33) it declares `canRetrieveWindowContent="true"` solely so that it can move input focus / click the focused item through
+  `AccessibilityNodeInfo.focusSearch`/`performAction`: it never reads, stores or sends any on-screen text or content.
+- The browser's saved state (last URL + WebView back/forward history) is kept only in the phone app's private storage (backups are disabled) and is never sent anywhere.
 - No unauthenticated or plaintext endpoint was added; the control channel is unchanged.
 
 ## Auto-updater (`:updater`)

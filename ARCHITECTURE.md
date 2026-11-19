@@ -76,6 +76,8 @@ tested end-to-end against the real receiver:
   with EasyList, uBlock Origin (filters/badware/unbreak), and Peter Lowe's list downloaded over HTTPS every 3 days,
   indexed by host/token, plus cosmetic CSS injection (`cosmeticCss`) while never blocking castable media URLs.
 
+Browser persistence (`web/BrowserStateStore.kt`): the WebView's `saveState` bundle (back/forward list + scroll) and last URL are written to private storage after each finished page and when the app pauses; `BrowserScreen` restores them (falling back to reloading the URL), and `MainActivity` reopens the browser on cold start if it was the last screen (not when launched by a share).
+
 Cast browser (`sender-app/.../web/BrowserScreen.kt`): a hardened WebView. `shouldInterceptRequest` (plus a
 service-worker client) sees every request of every frame, filters ads, and feeds `CandidateList`; "Scan page" adds what
 the DOM shows. The candidates sheet probes lazily, shows quality/duration/live/DRM, lets the user pick subtitles,
@@ -103,7 +105,7 @@ Additional engine capabilities:
 - `SleepTimer` stops playback automatically when the requested countdown expires.
 - `TvRemoteDispatcher` (`platform/TvRemoteControl.kt`) executes `remote.key` (D-pad, OK, Back, Home, Play/Pause, Rewind,
   Fast-Forward, Volume/Mute via `AudioManager` or in-app `KeyEvent`s) and `remote.text` (TV clipboard + virtual keyboard
-  events via `KeyCharacterMap`). Optional `TvRemoteAccessibilityService` allows D-pad/Back/Home across other TV apps.
+  events via `KeyCharacterMap`). Optional `TvRemoteAccessibilityService` allows D-pad/Back/Home across other TV apps: Android 13+ uses the system D-pad global actions; older TVs (and a refused global action) fall back to moving accessibility focus through the node tree (`focusSearch` + `ACTION_FOCUS` / `ACTION_CLICK`), which needs `canRetrieveWindowContent` (declared only in the pre-API-33 `res/xml` config; `res/xml-v33` declares it `false`). If `WRITE_SECURE_SETTINGS` was granted once over adb, the app can switch the service on itself (`TvRemoteDispatcher.selfEnable`).
 
 ## TV app lifecycle
 - `ReceiverService` is a `connectedDevice` foreground service (allowed from BOOT_COMPLETED on Android 15, unlike

@@ -16,6 +16,8 @@
          when a phone casts while the app is in the background (Android 10+). Never granted automatically. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Only usable after `adb shell pm grant`: lets the app switch its own accessibility service on (system-wide phone remote). -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
 
     <!-- Lets Settings check (resolveActivity) whether this TV ships the overlay-permission screen (Android 11+ package visibility). -->
     <queries>

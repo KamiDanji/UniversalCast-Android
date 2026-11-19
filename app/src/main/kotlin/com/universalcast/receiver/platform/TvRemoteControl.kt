@@ -12,7 +12,9 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
+import android.view.View
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import com.universalcast.playback.PlaybackStatus
 import com.universalcast.playback.RemoteKey
 import java.lang.ref.WeakReference
@@ -196,6 +198,24 @@ class TvRemoteDispatcher(
             enabled.contains(context.packageName)
         }.getOrDefault(false)
 
+        /** True when `adb shell pm grant <pkg> android.permission.WRITE_SECURE_SETTINGS` was run once. */
+        fun canSelfEnable(context: Context): Boolean =
+            context.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        /** Turns the accessibility service on without the Settings screen; needs [canSelfEnable]. */
+        fun selfEnable(context: Context): Boolean = runCatching {
+            if (!canSelfEnable(context)) return false
+            val component = "${context.packageName}/${TvRemoteAccessibilityService::class.java.name}"
+            val cur = Settings.Secure.getString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+            if (!cur.split(':').contains(component)) {
+                Settings.Secure.putString(context.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, if (cur.isEmpty()) component else "$cur:$component")
+            }
+            Settings.Secure.putInt(context.contentResolver, Settings.Secure.ACCESSIBILITY_ENABLED, 1)
+            true
+        }.getOrDefault(false)
+
+        fun grantCommand(context: Context): String = "adb shell pm grant ${context.packageName} android.permission.WRITE_SECURE_SETTINGS"
+
         fun openAccessibilitySettings(context: Context) {
             runCatching {
                 context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -223,6 +243,10 @@ class TvRemoteAccessibilityService : AccessibilityService() {
         super.onDestroy()
     }
 
+    /**
+     * System-wide D-pad. Android 13+ has real D-pad global actions; if the system refuses them, and on older TVs, focus is
+     * moved through the accessibility node tree instead (needs `canRetrieveWindowContent`), and OK clicks the focused node.
+     */
     fun performDpad(key: RemoteKey): Boolean {
         if (Build.VERSION.SDK_INT >= 33) {
             val action = when (key) {
@@ -233,9 +257,44 @@ class TvRemoteAccessibilityService : AccessibilityService() {
                 RemoteKey.CENTER -> GLOBAL_ACTION_DPAD_CENTER
                 else -> return false
             }
-            return performGlobalAction(action)
+            if (performGlobalAction(action)) return true
         }
-        return false
+        return navigateByFocus(key)
+    }
+
+    private fun navigateByFocus(key: RemoteKey): Boolean {
+        val root = rootInActiveWindow ?: return false
+        try {
+            val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: root.findFocus(AccessibilityNodeInfo.FOCUS_ACCESSIBILITY)
+            if (key == RemoteKey.CENTER) {
+                var n: AccessibilityNodeInfo? = focused
+                while (n != null) {
+                    if (n.isClickable && n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                    n = n.parent
+                }
+                return false
+            }
+            val direction = when (key) {
+                RemoteKey.UP -> View.FOCUS_UP
+                RemoteKey.DOWN -> View.FOCUS_DOWN
+                RemoteKey.LEFT -> View.FOCUS_LEFT
+                RemoteKey.RIGHT -> View.FOCUS_RIGHT
+                else -> return false
+            }
+            val target = focused?.focusSearch(direction) ?: firstFocusable(root)
+            return target?.performAction(AccessibilityNodeInfo.ACTION_FOCUS) == true
+        } finally {
+            runCatching { root.recycle() }
+        }
+    }
+
+    private fun firstFocusable(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        if (node.isFocusable && node.isVisibleToUser) return node
+        for (i in 0 until node.childCount) {
+            val found = node.getChild(i)?.let { firstFocusable(it) }
+            if (found != null) return found
+        }
+        return null
     }
 
     companion object {

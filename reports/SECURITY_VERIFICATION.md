@@ -40,7 +40,7 @@ Reviewed in code, not testable on the JVM (verify on a device):
 - Phone WebView: no `addJavascriptInterface`, file/content access off, single window, non-http(s) navigation blocked,
   renderer crash handled; `FilterLists` downloads over plain HTTPS with a 12 MiB per-list size cap.
 - TV: boot receiver can only start the receiver service; overlay window is non-focusable and non-touchable; optional
-  `TvRemoteAccessibilityService` is not exported, has `canRetrieveWindowContent="false"` and `canPerformGestures="false"`.
+  `TvRemoteAccessibilityService` is not exported and has `canPerformGestures="false"`; `canRetrieveWindowContent` is `false` on API 33+ (`res/xml-v33`) and `true` only on older TVs, where it is used only for focus navigation (no content is read).
 - Updater: `UpdateManager` enforces HTTPS and `TrustedHosts` across max 6 manual redirect hops, verifies APK SHA-256
   digest, package name, and strictly higher `versionCode` before passing to `PackageInstaller`.
 

@@ -12,7 +12,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import com.universalcast.playback.PlaybackStatus
+import com.universalcast.receiver.platform.TvRemoteDispatcher
 
 @Composable
 fun HomeScreen(
@@ -30,6 +34,11 @@ fun HomeScreen(
     val connected by rt.connected.collectAsState()
     val playback by rt.playback.collectAsState()
     val first = remember { FocusRequester() }
+    // The phone's D-pad / Back / Home only work in other TV apps once the accessibility service is on: offer it in one press.
+    val ctx = LocalContext.current
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(2000); tick++ } }
+    val systemRemoteOn = remember(tick) { TvRemoteDispatcher.isAccessibilityEnabled(ctx) }
     LaunchedEffect(Unit) { runCatching { first.requestFocus() } }
 
     ScreenScaffold("UniversalCast", onBack = null) {
@@ -62,6 +71,18 @@ fun HomeScreen(
                 TvButton("Paired devices", onDevices, Modifier.fillMaxWidth(), primary = false)
                 TvButton("Ambient clock screen", onAmbient, Modifier.fillMaxWidth(), primary = false)
                 TvButton("Settings & diagnostics", onSettings, Modifier.fillMaxWidth(), primary = false)
+                if (!systemRemoteOn) {
+                    // The phone's D-pad / Back / Home only reach other TV apps once the accessibility service is on.
+                    TvButton(
+                        "Turn on phone remote for all apps",
+                        { if (!TvRemoteDispatcher.selfEnable(ctx)) TvRemoteDispatcher.openAccessibilitySettings(ctx) },
+                        Modifier.fillMaxWidth(), primary = false,
+                    )
+                    Text(
+                        "Right now your phone's D-pad, Back and Home only work inside UniversalCast.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
         }
     }

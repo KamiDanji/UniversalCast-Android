@@ -196,7 +196,12 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
     val streams = remember(version) { page.list.streams() }
     val subtitles = remember(version) { page.list.subtitles() }
 
-    var address by remember { mutableStateOf(vm.browserUrl.value ?: "") }
+    val appCtx = androidx.compose.ui.platform.LocalContext.current
+    // Resume the page (history + scroll) the browser was on when it was last closed, unless something asked for another page
+    // (a shared link, the "Page" button in history).
+    val savedState = remember { BrowserStateStore.load(appCtx) }
+    val resumeOnce = remember { booleanArrayOf(savedState != null && (vm.browserUrl.value == null || vm.browserUrl.value == savedState.url)) }
+    var address by remember { mutableStateOf(vm.browserUrl.value ?: (if (resumeOnce[0]) savedState?.url else null) ?: "") }
     var addressError by remember { mutableStateOf(false) }
     var progress by remember { mutableIntStateOf(100) }
     var webView by remember { mutableStateOf<WebView?>(null) }
@@ -324,9 +329,19 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
         }
         onDispose {
             runCatching { swc?.setServiceWorkerClient(object : ServiceWorkerClient() {}) }
-            webView?.let { it.stopLoading(); it.destroy() }
+            webView?.let { BrowserStateStore.save(appCtx, it); it.stopLoading(); it.destroy() }
             webView = null
         }
+    }
+
+    // Save the page when the app leaves the foreground: the scroll position changes long after the page finished loading.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) webView?.let { BrowserStateStore.save(appCtx, it) }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -457,7 +472,10 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
 
                                     override fun onPageCommitVisible(view: WebView, url: String) { hideAds(view, url) }
 
-                                    override fun onPageFinished(view: WebView, url: String) { canGoBack = view.canGoBack(); hideAds(view, url) }
+                                    override fun onPageFinished(view: WebView, url: String) {
+                                        canGoBack = view.canGoBack(); hideAds(view, url)
+                                        BrowserStateStore.save(view.context, view)
+                                    }
 
                                     override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
                                         // The page's renderer crashed or was killed: drop this WebView and build a new one.
@@ -509,7 +527,13 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                                 }
                                 page.userAgent = settings.userAgentString
                                 webView = this
-                                vm.browserUrl.value?.let { loadUrl(it) }
+                                val resume = savedState
+                                if (resumeOnce[0] && resume != null) {
+                                    resumeOnce[0] = false
+                                    // Restores the back/forward list and scroll position; if WebView can't read the old state, just reload the URL.
+                                    if (resume.state?.let { restoreState(it) } == null) loadUrl(resume.url)
+                                    vm.browserUrl.value = resume.url
+                                } else vm.browserUrl.value?.let { loadUrl(it) }
                             }
                         },
                     )

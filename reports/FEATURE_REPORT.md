@@ -84,6 +84,8 @@ Use debug builds (`com.universalcast.receiver.debug`, `com.universalcast.sender.
 32. Phone Remote: tab row (Media & Cast / TV Remote); with nothing playing the transport card is hidden and the cast options are first; with media playing the icon transport (back 10 s, play/pause, forward 10 s, previous/next) works.
 33. TV: D-pad focus on every button shows the TV Material focus (scale + inverted colours); settings toggles are switches (one OK press toggles); dialogs (revoke, rename, update) focus their first button; pairing focuses *Codes match* / *Approve* automatically; splash is skipped by any key.
 34. Phone *Appearance*: the *Expressive* theme and the Light/Dark/System modes apply immediately; **Pure black (OLED)** turns the dark-mode background and base surfaces to true black (cards stay slightly lighter) with any colour theme, including Wallpaper.
+35. TV not showing the phone remote outside UniversalCast: Home shows **Turn on phone remote for all apps**; press it (Accessibility screen opens, or it enables itself if `WRITE_SECURE_SETTINGS` was granted), then from the phone remote D-pad / OK / Back / Home must work on the TV launcher and in other apps.
+36. Phone browser: open a site, scroll, close the app completely (swipe it away), reopen: the browser is back on the same page and scroll position and Back still walks through the earlier pages. Choose **Home** (arrow) first and reopen: the app starts on Home but the browser resumes the same page when opened.
 
 ## Known limits (stated in the UI/docs)
 - DRM (Widevine/FairPlay/PlayReady, SAMPLE-AES) can't be cast by any method here.

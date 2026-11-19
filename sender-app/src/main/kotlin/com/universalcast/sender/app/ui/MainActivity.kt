@@ -18,6 +18,7 @@ import com.universalcast.sender.MediaSniffer
 import com.universalcast.sender.app.Links
 import com.universalcast.sender.app.SenderApp
 import com.universalcast.sender.app.web.BrowserScreen
+import com.universalcast.sender.app.web.BrowserStateStore
 
 private enum class Screen { HOME, PAIR, REMOTE, BROWSER, ABOUT }
 
@@ -36,7 +37,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             SenderTheme {
                 UpdatePrompt((application as SenderApp).updates)
-                var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
+                // Cold start: go back to the browser if that is where the app was left (not when launched by a share).
+                var screen by rememberSaveable {
+                    mutableStateOf(if (intent?.action != Intent.ACTION_SEND && BrowserStateStore.wasOpen(this@MainActivity)) Screen.BROWSER else Screen.HOME)
+                }
+                LaunchedEffect(screen) { BrowserStateStore.setOpen(this@MainActivity, screen == Screen.BROWSER) }
                 val openBrowser by vm.openBrowserRequest.collectAsState()
                 LaunchedEffect(openBrowser) { if (openBrowser) { screen = Screen.BROWSER; vm.openBrowserRequest.value = false } }
                 // The browser handles Back itself (page history first).

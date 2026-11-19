@@ -105,7 +105,20 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                         "Your phone can control UniversalCast and TV volume immediately. To also use the phone touchpad across other Android TV apps and Home screen, enable “UniversalCast Phone Remote” in Accessibility settings.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                     )
-                    InfoRow("System-wide TV navigation", if (a11yGranted) "enabled" else "in-app + volume only (optional Accessibility service off)")
+                    InfoRow("System-wide TV navigation", if (a11yGranted) "enabled" else "in-app + volume only (Accessibility service off)")
+                    if (!a11yGranted) {
+                        TvButton(
+                            "Turn on",
+                            { if (!TvRemoteDispatcher.selfEnable(ctx)) TvRemoteDispatcher.openAccessibilitySettings(ctx) },
+                        )
+                        if (!TvRemoteDispatcher.canSelfEnable(ctx)) {
+                            Text(
+                                "If this TV hides the Accessibility screen, run once from a computer, then press “Turn on” again:",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(TvRemoteDispatcher.grantCommand(ctx), color = MaterialTheme.colorScheme.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
                     TvButton("Open Accessibility settings", { TvRemoteDispatcher.openAccessibilitySettings(ctx) }, primary = false)
                 }
                 InfoCard(Modifier.fillMaxWidth()) {
