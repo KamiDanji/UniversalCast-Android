@@ -1,4 +1,4 @@
-# UniversalCast Receiver (Android TV) — v1.1.0
+# UniversalCast Receiver (Android TV) — v1.1.1
 
 Secure Android TV receiver and companion phone sender for the **UniversalCast Protocol (UCP) 1.0**. A paired sender (phone, tablet, PC…)
 discovers the TV via mDNS, connects over pinned TLS WebSocket, authenticates with a signed challenge and then

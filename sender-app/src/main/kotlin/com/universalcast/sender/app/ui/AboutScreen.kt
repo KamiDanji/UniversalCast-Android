@@ -51,6 +51,7 @@ fun AboutScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = heroBarColors(),
                 title = { Text("About UniversalCast") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -69,7 +70,7 @@ fun AboutScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             // --- Version Card (Spam-tap to unlock Dev / Dummy TV Mode) -----------------------------
-            Panel {
+            Panel(tone = Tone.PRIMARY) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
