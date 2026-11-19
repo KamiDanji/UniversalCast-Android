@@ -1,8 +1,8 @@
 package com.universalcast.receiver.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,27 +34,27 @@ fun HomeScreen(
 
     ScreenScaffold("UniversalCast", onBack = null) {
         Row(horizontalArrangement = Arrangement.spacedBy(32.dp), modifier = Modifier.fillMaxSize()) {
-            Card(Modifier.weight(1.3f).fillMaxHeight()) {
-                Text(name, style = MaterialTheme.typography.headlineMedium, color = Palette.Text)
+            InfoCard(Modifier.weight(1.3f).fillMaxHeight()) {
+                Text(name, style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(8.dp))
                 when {
-                    error != null -> { Chip("Not running", Palette.Danger); Text(error!!, color = Palette.Danger, style = MaterialTheme.typography.bodyLarge) }
+                    error != null -> { Chip("Not running", MaterialTheme.colorScheme.error); Text(error!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyLarge) }
                     running -> {
-                        Chip("Ready · secure (TLS) · port ${rt.core.boundPort}", Palette.Ok, live = true)
-                        if (rt.config.mode.wire == "development") { Spacer(Modifier.height(4.dp)); Chip("Development build", Palette.Warn) }
+                        Chip("Ready · secure (TLS) · port ${rt.core.boundPort}", MaterialTheme.status.ok, live = true)
+                        if (rt.config.mode.wire == "development") { Spacer(Modifier.height(4.dp)); Chip("Development build", MaterialTheme.status.warn) }
                     }
-                    else -> Chip("Starting…", Palette.Warn, live = true)
+                    else -> Chip("Starting…", MaterialTheme.status.warn, live = true)
                 }
                 Spacer(Modifier.height(16.dp))
-                Text("${senders.count { !it.isRevoked }} paired device(s) · ${connected.size} connected", color = Palette.TextDim, style = MaterialTheme.typography.bodyLarge)
+                Text("${senders.count { !it.isRevoked }} paired device(s) · ${connected.size} connected", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 if (playback.status != PlaybackStatus.IDLE) {
                     Spacer(Modifier.height(16.dp))
-                    Text("Now playing: ${playback.title ?: playback.mediaUri ?: ""}", color = Palette.Text, style = MaterialTheme.typography.bodyLarge, maxLines = 2)
+                    Text("Now playing: ${playback.title ?: playback.mediaUri ?: ""}", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, maxLines = 2)
                 }
                 if (connected.isNotEmpty()) {
                     Spacer(Modifier.height(16.dp))
-                    Text("Connected", color = Palette.TextDim, style = MaterialTheme.typography.titleMedium)
-                    connected.forEach { Text("• ${it.name} (${it.role.name.lowercase()})", color = Palette.Text, style = MaterialTheme.typography.bodyLarge) }
+                    Text("Connected", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
+                    connected.forEach { Text("• ${it.name} (${it.role.name.lowercase()})", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge) }
                 }
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) {

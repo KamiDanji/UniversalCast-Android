@@ -7,13 +7,15 @@
 
 ## Commands (Windows: use `gradlew.bat`)
 ```
-./gradlew :core:test                 # JVM tests for the protocol/security core
-./gradlew :app:testDebugUnitTest     # app unit tests
-./gradlew :app:assembleDebug         # TV receiver debug APK (applicationId …receiver.debug, mode=development)
-./gradlew :sender-app:assembleDebug  # phone app debug APK (applicationId com.universalcast.sender.debug)
-./gradlew :sender-app:testDebugUnitTest
-./gradlew :app:assembleRelease       # release APK, minified, mode=production, UNSIGNED
-./gradlew :app:connectedDebugAndroidTest   # Keystore tests on a device/emulator (API 23+)
+./gradlew test                            # all unit tests (:core, :app, :sender-app, :updater)
+./gradlew :core:test                      # JVM tests for the protocol/security/proxy core
+./gradlew :app:testDebugUnitTest          # receiver app unit tests
+./gradlew :sender-app:testDebugUnitTest     # sender app unit tests
+./gradlew :updater:testDebugUnitTest        # auto-updater and Markdown parser unit tests
+./gradlew :app:assembleDebug              # TV receiver debug APK (applicationId …receiver.debug, mode=development)
+./gradlew :sender-app:assembleDebug       # phone app debug APK (applicationId com.universalcast.sender.debug)
+./gradlew assembleRelease                 # both release APKs, minified, mode=production (signed when keystore.properties exists)
+./gradlew :app:connectedDebugAndroidTest  # Keystore tests on a device/emulator (API 23+)
 ```
 Open the project folder in Android Studio and pick the `app` run configuration to install on an Android TV
 device/emulator (API 23+, Android TV system image).
@@ -43,13 +45,14 @@ keyPassword=...
 Both apps check GitHub's latest release on start (at most once an hour) and offer to download and install it.
 Debug builds never update (different applicationId).
 
-1. Bump `uc.versionName` (e.g. `1.0.1`) and `uc.versionCode` (+1) in `gradle.properties`. Both apps share them.
-2. `./gradlew assembleRelease` with `keystore.properties` in place.
-3. Create a GitHub release tagged `v<versionName>` (e.g. `v1.0.1`, not a draft or pre-release) and attach the two APKs,
+1. Bump `uc.versionName` (e.g. `1.1.0`) and `uc.versionCode` (+1, e.g. `12`) in `gradle.properties`. Both apps share them.
+2. `./gradlew assembleRelease` with `keystore.properties` in place (current version: `1.1.0`, `versionCode=12`).
+3. Create a GitHub release tagged `v<versionName>` (e.g. `v1.0.10`, not a draft or pre-release) and attach the two APKs,
    renamed so the names start with:
-   - `universalcast-receiver` (from `app/build/outputs/apk/release/`), e.g. `universalcast-receiver-1.0.1.apk`
-   - `universalcast-sender` (from `sender-app/build/outputs/apk/release/`), e.g. `universalcast-sender-1.0.1.apk`
-4. The release notes become the "what's new" text in the update dialog.
+   - `universalcast-receiver` (from `app/build/outputs/apk/release/app-release.apk`), e.g. `universalcast-receiver-1.1.0.apk`
+   - `universalcast-sender` (from `sender-app/build/outputs/apk/release/sender-app-release.apk`), e.g. `universalcast-sender-1.1.0.apk`
+   (Optional: keep copies locally under the git-untracked `release/` folder.)
+4. The GitHub release notes become the "what's new" text in the update dialog, rendered with Markdown formatting (`MarkdownParser`).
 
 The repository must be **public** (the apps call the unauthenticated GitHub API). The updater only downloads over
 https from github.com / githubusercontent.com, checks GitHub's SHA-256 digest of the asset, checks the APK is the same
@@ -62,8 +65,11 @@ the mDNS `mode` TXT value. **Plaintext and unauthenticated endpoints do not exis
 refuses to start with TLS or authentication disabled, and port 0 is only accepted in development (tests).
 
 ## Trying it without a sender app
-`core` contains a reference sender (`com.universalcast.sender.UcpClient`, `PairingClient`) used by the integration
-tests; it shows the exact client side of pairing and authentication.
+`core` contains both a reference sender (`com.universalcast.sender.UcpClient`, `PairingClient`, used by the integration
+tests) and a pure-JVM **Desktop CLI** (`com.universalcast.cli.UniversalCastCli`) supporting `pair`, `cast`,
+`cast-file` (streams local files via `MediaProxyServer`), `key`, `text`, `status`, and `stop`.
+You can also test phone features without a physical TV using the **Developer Dummy TV Simulator** (in the phone app:
+`⋮` → *About UniversalCast* → tap the **Version** card 5 times).
 
 ## Testing with the TV emulator and a physical phone
 
@@ -83,22 +89,22 @@ On a real TV on the same Wi-Fi none of this is needed. Release builds advertise 
 ## Building everything
 
 ```sh
-./gradlew :core:test :app:testDebugUnitTest :sender-app:testDebugUnitTest   # all unit tests
+./gradlew :core:test :app:testDebugUnitTest :sender-app:testDebugUnitTest :updater:testDebugUnitTest   # all unit tests
 ./gradlew assembleDebug                      # both apps, debug (installable as-is)
 ./gradlew :app:assembleDebug                 # TV receiver only
 ./gradlew :sender-app:assembleDebug          # phone sender only
-./gradlew assembleRelease                    # both apps, release (minified, UNSIGNED)
+./gradlew assembleRelease                    # both apps, release (minified; signed if keystore.properties is present, else unsigned)
 ```
 
 ## Where the APKs are
 
-| App | Debug (use this for testing) | Release (unsigned) |
+| App | Debug (use this for testing) | Release (`keystore.properties` configured / omitted) |
 |---|---|---|
-| TV receiver | `app/build/outputs/apk/debug/app-debug.apk` | `app/build/outputs/apk/release/app-release-unsigned.apk` |
-| Phone sender | `sender-app/build/outputs/apk/debug/sender-app-debug.apk` | `sender-app/build/outputs/apk/release/sender-app-release-unsigned.apk` |
+| TV receiver | `app/build/outputs/apk/debug/app-debug.apk` | `app/build/outputs/apk/release/app-release.apk` (or `...-unsigned.apk`) |
+| Phone sender | `sender-app/build/outputs/apk/debug/sender-app-debug.apk` | `sender-app/build/outputs/apk/release/sender-app-release.apk` (or `...-unsigned.apk`) |
 
-Release APKs are unsigned, and Android refuses to install an unsigned APK. Use the debug APKs for testing, or
-add a `signingConfig` first.
+When `keystore.properties` is omitted, release APKs stay unsigned and Android refuses to install an unsigned APK; use
+the debug APKs for local testing or configure `keystore.properties` first.
 
 ## Installing on a physical TV and phone
 
@@ -143,7 +149,7 @@ Two notes for your real TV:
 ## Running the tests
 
 ```sh
-./gradlew :core:test :app:testDebugUnitTest :sender-app:testDebugUnitTest
+./gradlew :core:test :app:testDebugUnitTest :sender-app:testDebugUnitTest :updater:testDebugUnitTest
 ```
 `:app:connectedDebugAndroidTest` / `:sender-app:connectedDebugAndroidTest` (Keystore tests) need a connected device.
 

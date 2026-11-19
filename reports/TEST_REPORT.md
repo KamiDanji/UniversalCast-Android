@@ -1,40 +1,48 @@
 # Test report
 
+Verified at version **1.1.0** (`versionCode=12`).
+
 Command (Windows, JDK 17, Gradle 8.7, `--rerun-tasks`):
-`.\gradlew.bat :core:test :app:assembleDebug :sender-app:assembleDebug :app:testDebugUnitTest :sender-app:testDebugUnitTest`
-→ **BUILD SUCCESSFUL**, both debug APKs built.
+`.\gradlew.bat :core:test :app:testDebugUnitTest :sender-app:testDebugUnitTest :updater:testDebugUnitTest --rerun-tasks`
+→ **BUILD SUCCESSFUL** (75 executed tasks, as of 1.0.10; for 1.1.0 the `:sender-app` and `:app` unit tests were re-run, including the new `ThemeTest`). Release builds also compiled and packaged cleanly via `.\gradlew.bat assembleRelease`.
 
 | Module | Tests | Failures | Errors | Skipped |
 |---|---|---|---|---|
-| `:core` | **200** | 0 | 0 | 0 |
-| `:app` (unit) | **10** | 0 | 0 | 0 |
-| `:sender-app` (unit) | **5** | 0 | 0 | 0 |
+| `:core` | **222** | 0 | 0 | 0 |
+| `:app` (unit) | **11** | 0 | 0 | 0 |
+| `:sender-app` (unit) | **8** | 0 | 0 | 0 |
+| `:updater` (unit) | **6** | 0 | 0 | 0 |
+| **Total** | **247** | **0** | **0** | **0** |
 
-Baseline before this work: `:core` 171 tests, 0 failures.
-
-## :core suites
+## :core suites (222 tests)
 | Suite | Tests | Scope |
 |---|---|---|
-| HandlerTest | 37 | pipeline, permissions, revocation…; **new**: header/subtitle validation tables, headers+subtitles reach the engine, observer forbidden, capabilities features, oversize |
-| SenderTest | 29 | phone side vs. real WSS receiver; **new**: disconnect while commands are queued (regression), browser cast end-to-end (exact headers/subtitles at the fake engine), invalid casts refused on the phone |
-| MediaSnifferTest | 10 | URL-shape tables (HLS/DASH/progressive/audio/subtitle/ignored), language guessing, candidate ranking/dedupe/cap/variant hiding, thread safety, `CastHeaders` |
-| AdBlockerTest | 4 | listed domains + subdomains blocked; look-alikes, video CDNs, non-web URLs, bare TLDs not; 100k lookups < 2 s |
+| HandlerTest | 38 | pipeline, permissions, revocation, header/subtitle validation tables, detached playback grace period, sweep expiry, resume & revocation while detached |
+| IntegrationTest | 34 | end-to-end TLS 1.2/1.3 WebSocket pairing, auth, replay, detached playback reconnect, grace-period=0 stop, revocation, malformed abuse |
+| SenderTest | 30 | phone side vs. real WSS receiver: reconnect, queued disconnect regression, browser cast end-to-end, invalid casts refused, blackhole TLS handshake timeout, encrypted store |
+| PairingTest | 19 | QR bootstrap, HKDF/SAS agreement, sender proofs, expiry, error cases |
+| StorageTest | 12 | AES-256-GCM encrypted registry, tamper detection, quarantine, corruption recovery, schema migrations |
+| AuthenticatorTest | 11 | challenge freshness, single-use & replay detection, connection binding, expiry, wrong key |
+| FilterEngineTest | 11 | Adblock-Plus/uBlock rule parsing (`\|\|domain^`, `@@`, `$third-party`, `$domain=`, resource types, cosmetic CSS, registrable domain) |
 | StreamProbeTest | 11 | JDK HttpServer: master/media/live playlists, relative URIs, extensionless, DRM markers (HLS + DASH), HTML page, progressive sniffing + Range, HTTP errors, unreachable host, timeout, 256 KiB cap, redirects (cookie not forwarded cross-host), ISO durations |
-| IntegrationTest 33 · PairingTest 18 · StorageTest 12 · AuthenticatorTest 11 · CryptoTest 10 · StrictJsonTest 6 · EnvelopeTest 5 · ConfigAndDiscoveryTest 4 · SessionManagerTest 4 · PermissionsAndRegistryTest 3 · PlaybackModelTest 3 | | unchanged |
+| MediaSnifferTest | 10 | URL-shape tables (HLS/DASH/progressive/audio/subtitle/ignored), language guessing, candidate ranking/dedupe/cap/variant hiding, thread safety, `CastHeaders` |
+| RoadmapFeaturesTest | 7 | `MediaProxyServer` local range requests & unauthorized token rejection, HLS manifest rewriting & cookie forwarding, Up Next queue + auto-advance, live track switching/offset/style/video scale/sleep timer, remote keys/text & observer denial, history/bookmarks persistence, Dummy TV simulator |
+| CryptoTest | 10 | EC P-256 validation, HKDF-SHA256, HMAC, transcripts |
+| StrictJsonTest | 6 | strict parser, duplicate keys, depth limit, overflow, trailing data |
+| EnvelopeTest | 5 | UCP 1.0 envelope encoding/decoding & validation |
+| AdBlockerTest | 4 | listed domains + subdomains blocked; look-alikes, video CDNs, non-web URLs, bare TLDs not; 100k lookups < 2 s |
+| ConfigAndDiscoveryTest | 4 | config validation, mDNS TXT records, duplicate-free advertisement |
+| SessionManagerTest | 4 | create/validate/terminate, last-controller takeover, uniqueness |
+| PermissionsAndRegistryTest | 3 | role permissions, registry operations |
+| PlaybackModelTest | 3 | status derivation table, snapshot JSON round-trip, media URI validation |
 
-## :app / :sender-app
-- `PoliciesTest` (9): `shouldAutostart`, `AutoLaunchPolicy` (reasons, API 29 boundary, 2 s debounce), `CastStartDetector`, media-key policy, adb command. `UiFormattingTest` (1).
-- `UrlInputTest` (3): `example.org` → `https://example.org`, kept/rejected inputs. `LinksTest` (2).
+## :app / :sender-app / :updater unit suites (22 tests)
+- `:app` — `PoliciesTest` (10): `shouldAutostart`, `AutoLaunchPolicy` (reasons, API 29 boundary, 2 s debounce), `CastStartDetector`, `PlayerKeyPolicy`, `OverlayPermission.adbCommand`, **`PlayerOsdTracker`** (OSD pills for volume/speed/pause/play/seek/subtitle delay/off). `UiFormattingTest` (1).
+- `:sender-app` — `UrlInputTest` (3): `example.org` → `https://example.org`, kept/rejected inputs. `LinksTest` (2).
+- `:updater` — `ReleaseTest` (6): `Versions.isNewer`, `ReleaseParser` asset selection, draft/prerelease filtering, digest validation, `TrustedHosts`, **`MarkdownParser`** block & inline parsing.
 
 ## Flaky `SenderTest.heartbeatAndCommandsNeverCollideOnSequenceNumbers`
-- 20 isolated runs of `SenderTest`: 20/20 green, no reproduction.
-- Stress (same test body in a loop, CPU hog threads): **1 failure in 150 and 1 in 600 iterations** before the fix:
-  a ping (or `pair.confirm`) response never reached the phone; the heartbeat closed the socket after 4 s, then the
-  commands already queued ran against it and surfaced "Unexpected error: WebsocketNotConnectedException".
-- Cause 1 (receiver, library): lost-wakeup race in Java-WebSocket 1.6.0 `WebSocketServer.doWrite()`; fixed by a write
-  watchdog in `UcpServer`. Cause 2 (phone): `SenderController` let queued commands hit a dead socket; fixed in
-  `UcpClient`/`SenderController`, with a deterministic regression test that fails on the old code.
-- After the fix: **1000 stress iterations, 0 failures** (523 s).
+- Fixed in earlier pass via `UcpServer` write watchdog + `SenderController` immediate `connectionLost` handling; 1000 stress iterations passed with 0 failures.
 
 ## Not run
-`:app:connectedDebugAndroidTest` / `:sender-app:connectedDebugAndroidTest` (need a device); no emulator/TV/phone runs.
+`:app:connectedDebugAndroidTest` / `:sender-app:connectedDebugAndroidTest` (need a connected Android device); no physical TV or phone runtime verification in this pass.

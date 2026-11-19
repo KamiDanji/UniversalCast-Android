@@ -48,7 +48,7 @@ fun UpdatePrompt(updates: UpdateManager) {
                 Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
                     Text(
                         "You have ${updates.currentVersion}. The new version downloads from GitHub and Android asks you to confirm the install.",
-                        color = Palette.TextDim,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
                     if (s.release.notes.isNotEmpty()) {
@@ -63,7 +63,7 @@ fun UpdatePrompt(updates: UpdateManager) {
         is UpdateState.Downloading -> AlertDialog(
             onDismissRequest = {},
             title = { Text("Downloading ${s.release.version}…") },
-            text = { Column { LinearProgressIndicator(progress = { s.percent / 100f }, modifier = Modifier.fillMaxWidth()); Text("${s.percent}%", color = Palette.TextDim) } },
+            text = { Column { LinearProgressIndicator(progress = { s.percent / 100f }, modifier = Modifier.fillMaxWidth()); Text("${s.percent}%", color = MaterialTheme.colorScheme.onSurfaceVariant) } },
             confirmButton = {},
         )
         is UpdateState.NeedsInstallPermission -> AlertDialog(
@@ -101,7 +101,7 @@ fun MarkdownReleaseNotes(markdown: String, modifier: Modifier = Modifier) {
                         2 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                         else -> MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
                     }
-                    val color = if (b.level <= 2) Palette.Accent else Palette.Text
+                    val color = if (b.level <= 2) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                     Spacer(Modifier.height(2.dp))
                     Text(text = renderSpans(b.spans), style = style, color = color)
                 }
@@ -110,10 +110,10 @@ fun MarkdownReleaseNotes(markdown: String, modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth().padding(start = (b.indentLevel * 12).dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text(b.bullet, color = Palette.Accent, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text(b.bullet, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         Text(
                             text = renderSpans(b.spans),
-                            color = Palette.Text,
+                            color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -123,24 +123,24 @@ fun MarkdownReleaseNotes(markdown: String, modifier: Modifier = Modifier) {
                     Box(
                         Modifier
                             .fillMaxWidth()
-                            .background(Palette.SurfaceHigh, RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(10.dp))
                             .padding(10.dp),
                     ) {
                         Text(
                             text = b.code,
-                            color = Palette.Text,
+                            color = MaterialTheme.colorScheme.onSurface,
                             fontFamily = FontFamily.Monospace,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
                 MarkdownBlock.Divider -> {
-                    HorizontalDivider(color = Palette.Outline, modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 4.dp))
                 }
                 is MarkdownBlock.Paragraph -> {
                     Text(
                         text = renderSpans(b.spans),
-                        color = Palette.Text,
+                        color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -149,27 +149,33 @@ fun MarkdownReleaseNotes(markdown: String, modifier: Modifier = Modifier) {
     }
 }
 
-private fun renderSpans(spans: List<MarkdownSpan>): AnnotatedString = buildAnnotatedString {
+@Composable
+private fun renderSpans(spans: List<MarkdownSpan>): AnnotatedString {
+    val strong = MaterialTheme.colorScheme.onSurface
+    val accent = MaterialTheme.colorScheme.primary
+    val codeBg = MaterialTheme.colorScheme.surfaceContainerHighest
+    return buildAnnotatedString {
     for (s in spans) {
         when (s) {
             is MarkdownSpan.Plain -> append(s.text)
-            is MarkdownSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Palette.Text)) { append(s.text) }
+            is MarkdownSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = strong)) { append(s.text) }
             is MarkdownSpan.Italic -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(s.text) }
             is MarkdownSpan.Code -> withStyle(
                 SpanStyle(
                     fontFamily = FontFamily.Monospace,
-                    color = Palette.Accent,
-                    background = Palette.SurfaceHigh,
+                    color = accent,
+                    background = codeBg,
                 )
             ) { append(" ${s.text} ") }
             is MarkdownSpan.Link -> withStyle(
                 SpanStyle(
-                    color = Palette.Accent,
+                    color = accent,
                     textDecoration = TextDecoration.Underline,
                     fontWeight = FontWeight.Medium,
                 )
             ) { append(s.label) }
         }
+    }
     }
 }
 

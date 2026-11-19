@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,21 +73,18 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
     val clipboard = LocalClipboardManager.current
 
     Scaffold(
-        modifier = Modifier.appBackground(),
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(st.receiver?.name ?: "Remote", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 actions = {
                     when (st.phase) {
-                        ConnectionPhase.CONNECTED -> Chip(if (st.canControl) "Controller" else "Observer", Palette.Ok, live = true)
-                        ConnectionPhase.CONNECTING, ConnectionPhase.RECONNECTING -> Chip("Connecting…", Palette.Warn, live = true)
-                        else -> Chip("Offline", Palette.Danger)
+                        ConnectionPhase.CONNECTED -> Chip(if (st.canControl) "Controller" else "Observer", MaterialTheme.status.ok, live = true)
+                        ConnectionPhase.CONNECTING, ConnectionPhase.RECONNECTING -> Chip("Connecting…", MaterialTheme.status.warn, live = true)
+                        else -> Chip("Offline", MaterialTheme.colorScheme.error)
                     }
                     Spacer(Modifier.width(12.dp))
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = androidx.compose.ui.graphics.Color.Transparent, titleContentColor = Palette.Text, navigationIconContentColor = Palette.Text),
             )
         },
     ) { pad ->
@@ -103,14 +101,14 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                 Panel {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
-                        Text(st.message ?: "Connecting securely…", color = Palette.Text)
+                        Text(st.message ?: "Connecting securely…", color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
             if (st.phase == ConnectionPhase.FAILED || st.phase == ConnectionPhase.DISCONNECTED) {
                 Panel {
-                    Text(if (st.phase == ConnectionPhase.FAILED) "Not connected" else "Disconnected", style = MaterialTheme.typography.titleMedium, color = Palette.Danger)
-                    Text(st.message ?: "Tap Connect to reach the TV.", color = Palette.Text)
+                    Text(if (st.phase == ConnectionPhase.FAILED) "Not connected" else "Disconnected", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+                    Text(st.message ?: "Tap Connect to reach the TV.", color = MaterialTheme.colorScheme.onSurface)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         val r = st.receiver
                         if (r != null && st.failure != FailureKind.REJECTED && st.failure != FailureKind.PIN_MISMATCH) {
@@ -130,39 +128,28 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                 if (st.isDummyMode) {
                     Panel {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Chip("Dev Mode · Dummy TV Simulator", Palette.Ok, live = true)
+                            Chip("Dev Mode · Dummy TV Simulator", MaterialTheme.status.ok, live = true)
                             TextButton(onClick = { rt.controller.disconnect(); onClose() }) {
-                                Text("Exit", color = Palette.Danger)
+                                Text("Exit", color = MaterialTheme.colorScheme.error)
                             }
                         }
                         Text(
                             text = st.dummyLastAction ?: "📺 Simulated TV ready",
-                            color = Palette.Text,
+                            color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
                         )
                     }
                 }
                 // --- top mode switcher: Media & Cast vs. Google TV-style Remote ------------------------
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(Palette.Surface, RoundedCornerShape(14.dp))
-                        .border(1.dp, Palette.Outline, RoundedCornerShape(14.dp))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    TabPill(
-                        label = "Media & Cast",
-                        selected = tab == RemoteTab.MEDIA,
-                        onClick = { tab = RemoteTab.MEDIA },
-                        modifier = Modifier.weight(1f),
+                TabRow(selectedTabIndex = tab.ordinal, containerColor = androidx.compose.ui.graphics.Color.Transparent) {
+                    Tab(
+                        selected = tab == RemoteTab.MEDIA, onClick = { tab = RemoteTab.MEDIA },
+                        text = { Text("Media & Cast") }, icon = { Icon(Icons.Filled.Cast, null) },
                     )
-                    TabPill(
-                        label = "TV Remote & Touchpad",
-                        selected = tab == RemoteTab.TV_REMOTE,
-                        onClick = { tab = RemoteTab.TV_REMOTE },
-                        modifier = Modifier.weight(1f),
+                    Tab(
+                        selected = tab == RemoteTab.TV_REMOTE, onClick = { tab = RemoteTab.TV_REMOTE },
+                        text = { Text("TV Remote") }, icon = { Icon(Icons.Filled.SettingsRemote, null) },
                     )
                 }
 
@@ -184,21 +171,21 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                         Text(
                             if (active) (snap.title ?: snap.mediaUri.orEmpty()) else "Nothing playing",
                             style = MaterialTheme.typography.titleMedium,
-                            color = Palette.Text,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Chip(snap.status.name.lowercase().replaceFirstChar { it.uppercase() }, statusColor(snap.status))
                             if (snap.queue.size > 1 && snap.queueIndex >= 0) {
-                                Chip("Queue ${snap.queueIndex + 1}/${snap.queue.size}", Palette.Accent)
+                                Chip("Queue ${snap.queueIndex + 1}/${snap.queue.size}", MaterialTheme.colorScheme.primary)
                             }
                             snap.sleepTimerRemainingMs?.let { rem ->
-                                Chip("Sleep ${(rem / 60_000L).coerceAtLeast(1L)}m", Palette.Warn)
+                                Chip("Sleep ${(rem / 60_000L).coerceAtLeast(1L)}m", MaterialTheme.status.warn)
                             }
                         }
                         snap.error?.let { err ->
-                            Text(err.message, color = Palette.Danger, style = MaterialTheme.typography.bodySmall)
+                            Text(err.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             val retryCandidate = lastDirectCast
                             if (st.canControl && retryCandidate != null && (err.message.contains("403") || err.message.contains("401") || err.message.contains("refused"))) {
                                 FilledTonalButton(
@@ -223,88 +210,92 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                 enabled = st.canControl,
                             )
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(formatTime(shown.toLong()), color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
-                                Text(formatTime(duration), color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                                Text(formatTime(shown.toLong()), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                                Text(formatTime(duration), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                             }
                         } else if (active) {
-                            Text(if (duration == null) "Live · ${formatTime(pos)}" else formatTime(pos), color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                            Text(if (duration == null) "Live · ${formatTime(pos)}" else formatTime(pos), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         }
                     }
 
                     // --- transport -------------------------------------------------------------------------
-                    Panel {
-                        val c = rt.controller
-                        val playing = snap.status == PlaybackStatus.PLAYING || snap.status == PlaybackStatus.BUFFERING || snap.status == PlaybackStatus.LOADING
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(onClick = { c.seek((st.estimatedPositionMs(System.currentTimeMillis()) - 10_000).coerceAtLeast(0)) }, enabled = st.canControl && snap.status != PlaybackStatus.IDLE, modifier = Modifier.weight(1f)) { Text("−10 s") }
-                            Button(
-                                onClick = { if (playing) c.pause() else if (snap.status == PlaybackStatus.PAUSED) c.resume() else c.play() },
-                                enabled = st.canControl && snap.status != PlaybackStatus.IDLE, modifier = Modifier.weight(1.4f),
-                            ) { Text(if (playing) "Pause" else "Play") }
-                            OutlinedButton(onClick = { c.seek(st.estimatedPositionMs(System.currentTimeMillis()) + 10_000) }, enabled = st.canControl && snap.status != PlaybackStatus.IDLE, modifier = Modifier.weight(1f)) { Text("+10 s") }
-                        }
-                        if (snap.queue.size > 1) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = { c.queuePrevious() },
-                                    enabled = st.canControl && snap.queueIndex > 0,
-                                    modifier = Modifier.weight(1f),
-                                ) { Text("⏮ Previous") }
-                                OutlinedButton(
-                                    onClick = { c.queueNext() },
-                                    enabled = st.canControl && snap.queueIndex + 1 < snap.queue.size,
-                                    modifier = Modifier.weight(1f),
-                                ) { Text("Next ⏭") }
+                    // Nothing is playing: the transport controls would all be disabled, so show the cast options right away.
+                    if (snap.status != PlaybackStatus.IDLE) {
+                        Panel {
+                            val c = rt.controller
+                            val playing = snap.status == PlaybackStatus.PLAYING || snap.status == PlaybackStatus.BUFFERING || snap.status == PlaybackStatus.LOADING
+                            val hasMedia = st.canControl && snap.status != PlaybackStatus.IDLE
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                                if (snap.queue.size > 1) {
+                                    IconButton(onClick = { c.queuePrevious() }, enabled = st.canControl && snap.queueIndex > 0) { Icon(Icons.Filled.SkipPrevious, "Previous") }
+                                }
+                                FilledTonalIconButton(
+                                    onClick = { c.seek((st.estimatedPositionMs(System.currentTimeMillis()) - 10_000).coerceAtLeast(0)) },
+                                    enabled = hasMedia, modifier = Modifier.size(52.dp),
+                                ) { Icon(Icons.Filled.Replay10, "Back 10 seconds") }
+                                FilledIconButton(
+                                    onClick = { if (playing) c.pause() else if (snap.status == PlaybackStatus.PAUSED) c.resume() else c.play() },
+                                    enabled = hasMedia, modifier = Modifier.size(72.dp),
+                                ) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(36.dp)) }
+                                FilledTonalIconButton(
+                                    onClick = { c.seek(st.estimatedPositionMs(System.currentTimeMillis()) + 10_000) },
+                                    enabled = hasMedia, modifier = Modifier.size(52.dp),
+                                ) { Icon(Icons.Filled.Forward10, "Forward 10 seconds") }
+                                if (snap.queue.size > 1) {
+                                    IconButton(onClick = { c.queueNext() }, enabled = st.canControl && snap.queueIndex + 1 < snap.queue.size) { Icon(Icons.Filled.SkipNext, "Next") }
+                                }
                             }
-                        }
-                        OutlinedButton(onClick = { c.stop() }, enabled = st.canControl && snap.status != PlaybackStatus.IDLE, modifier = Modifier.fillMaxWidth()) { Text("Stop", color = if (st.canControl) Palette.Danger else Palette.TextDim) }
-
-                        Text("Speed", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                            for (sp in listOf(0.5, 1.0, 1.25, 1.5, 2.0)) {
-                                FilterChip(
-                                    selected = abs(snap.speed - sp.toFloat()) < 0.01f,
-                                    onClick = { c.setSpeed(sp) }, enabled = st.canControl && snap.status != PlaybackStatus.IDLE,
-                                    label = { Text(if (sp == 1.0) "1×" else "$sp×") },
-                                )
+                            OutlinedButton(onClick = { c.stop() }, enabled = hasMedia, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Filled.Stop, null); Spacer(Modifier.width(8.dp)); Text("Stop", color = if (st.canControl) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                        }
-                        var vol by remember { mutableStateOf<Float?>(null) }
-                        Text("TV volume (player)", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
-                        Slider(
-                            value = vol ?: snap.volume, onValueChange = { vol = it },
-                            onValueChangeFinished = { vol?.let { v -> c.setVolume(v.toDouble()) }; vol = null },
-                            enabled = st.canControl && snap.status != PlaybackStatus.IDLE,
-                        )
 
-                        Text("Aspect ratio / zoom", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                            for ((label, mode) in listOf("Fit" to VideoScaleMode.FIT, "Zoom (Crop)" to VideoScaleMode.ZOOM, "Stretch 16:9" to VideoScaleMode.FILL)) {
-                                FilterChip(
-                                    selected = snap.videoScale == mode,
-                                    onClick = { c.setVideoScale(mode) },
-                                    enabled = st.canControl,
-                                    label = { Text(label) },
-                                )
+                            Text("Speed", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                for (sp in listOf(0.5, 1.0, 1.25, 1.5, 2.0)) {
+                                    FilterChip(
+                                        selected = abs(snap.speed - sp.toFloat()) < 0.01f,
+                                        onClick = { c.setSpeed(sp) }, enabled = st.canControl && snap.status != PlaybackStatus.IDLE,
+                                        label = { Text(if (sp == 1.0) "1×" else "$sp×") },
+                                    )
+                                }
                             }
-                        }
-
-                        Text("Sleep timer", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
-                            val activeSleepMin = snap.sleepTimerRemainingMs?.let { (it / 60_000L).toInt() }
-                            FilterChip(
-                                selected = activeSleepMin == null,
-                                onClick = { c.setSleepTimer(0L) },
-                                enabled = st.canControl,
-                                label = { Text("Off") },
+                            var vol by remember { mutableStateOf<Float?>(null) }
+                            Text("TV volume (player)", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                            Slider(
+                                value = vol ?: snap.volume, onValueChange = { vol = it },
+                                onValueChangeFinished = { vol?.let { v -> c.setVolume(v.toDouble()) }; vol = null },
+                                enabled = st.canControl && snap.status != PlaybackStatus.IDLE,
                             )
-                            for (mins in listOf(15, 30, 45, 60, 90)) {
+
+                            Text("Aspect ratio / zoom", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                for ((label, mode) in listOf("Fit" to VideoScaleMode.FIT, "Zoom (Crop)" to VideoScaleMode.ZOOM, "Stretch 16:9" to VideoScaleMode.FILL)) {
+                                    FilterChip(
+                                        selected = snap.videoScale == mode,
+                                        onClick = { c.setVideoScale(mode) },
+                                        enabled = st.canControl,
+                                        label = { Text(label) },
+                                    )
+                                }
+                            }
+
+                            Text("Sleep timer", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                val activeSleepMin = snap.sleepTimerRemainingMs?.let { (it / 60_000L).toInt() }
                                 FilterChip(
-                                    selected = activeSleepMin != null && activeSleepMin in (mins - 7)..(mins + 7),
-                                    onClick = { c.setSleepTimer(mins * 60_000L) },
+                                    selected = activeSleepMin == null,
+                                    onClick = { c.setSleepTimer(0L) },
                                     enabled = st.canControl,
-                                    label = { Text("${mins}m") },
+                                    label = { Text("Off") },
                                 )
+                                for (mins in listOf(15, 30, 45, 60, 90)) {
+                                    FilterChip(
+                                        selected = activeSleepMin != null && activeSleepMin in (mins - 7)..(mins + 7),
+                                        onClick = { c.setSleepTimer(mins * 60_000L) },
+                                        enabled = st.canControl,
+                                        label = { Text("${mins}m") },
+                                    )
+                                }
                             }
                         }
                     }
@@ -314,13 +305,13 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                         Panel {
                             val c = rt.controller
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("Audio & Subtitles", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                                Text("Audio & Subtitles", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                                 TextButton(onClick = { showSubtitleStyle = !showSubtitleStyle }) {
                                     Text(if (showSubtitleStyle) "Hide style" else "Subtitle style")
                                 }
                             }
                             if (snap.audioTracks.isNotEmpty()) {
-                                Text("Audio track", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+                                Text("Audio track", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                                     for (track in snap.audioTracks) {
                                         FilterChip(
@@ -332,7 +323,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                     }
                                 }
                             }
-                            Text("Subtitles", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+                            Text("Subtitles", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                                 FilterChip(
                                     selected = !snap.subtitlesEnabled || snap.subtitleTracks.none { it.selected },
@@ -350,7 +341,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                 }
                             }
                             val offsetSec = snap.subtitleOffsetMs / 1000.0
-                            Text("Subtitle timing (${if (offsetSec > 0) "+" else ""}${"%.1f".format(java.util.Locale.US, offsetSec)} s)", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+                            Text("Subtitle timing (${if (offsetSec > 0) "+" else ""}${"%.1f".format(java.util.Locale.US, offsetSec)} s)", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(onClick = { c.setSubtitleOffset(snap.subtitleOffsetMs - 500L) }, enabled = st.canControl && snap.status != PlaybackStatus.IDLE, modifier = Modifier.weight(1f)) { Text("−0.5 s") }
                                 OutlinedButton(onClick = { c.setSubtitleOffset(0L) }, enabled = st.canControl && snap.status != PlaybackStatus.IDLE && snap.subtitleOffsetMs != 0L, modifier = Modifier.weight(1f)) { Text("Reset") }
@@ -359,8 +350,8 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
 
                             if (showSubtitleStyle) {
                                 val style = snap.subtitleStyle
-                                HorizontalDivider(color = Palette.Outline)
-                                Text("Subtitle size", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                Text("Subtitle size", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     for ((label, sc) in listOf("Small" to 0.8f, "Normal" to 1.0f, "Large" to 1.3f, "XL" to 1.65f)) {
                                         FilterChip(
@@ -371,7 +362,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                         )
                                     }
                                 }
-                                Text("Background", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+                                Text("Background", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     for ((label, bg) in listOf("None" to 0.0f, "Dim" to 0.55f, "Solid" to 0.9f)) {
                                         FilterChip(
@@ -382,7 +373,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                         )
                                     }
                                 }
-                                Text("Bottom position", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+                                Text("Bottom position", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     for ((label, padFrac) in listOf("Low" to 0.04f, "Normal" to 0.08f, "High" to 0.14f)) {
                                         FilterChip(
@@ -402,9 +393,9 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                         Panel {
                             val c = rt.controller
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("Up Next Queue (${snap.queue.size})", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                                Text("Up Next Queue (${snap.queue.size})", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                                 if (st.canControl && snap.queue.size > 1) {
-                                    TextButton(onClick = { c.queueClear() }) { Text("Clear", color = Palette.Danger) }
+                                    TextButton(onClick = { c.queueClear() }) { Text("Clear", color = MaterialTheme.colorScheme.error) }
                                 }
                             }
                             snap.queue.forEachIndexed { idx, item ->
@@ -413,7 +404,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                     Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(10.dp))
-                                        .background(if (isCurrent) Palette.Accent.copy(alpha = 0.16f) else Palette.SurfaceHigh)
+                                        .background(if (isCurrent) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceContainerHighest)
                                         .clickable(enabled = st.canControl && !isCurrent) { c.queueJump(item.id) }
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -421,12 +412,12 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                 ) {
                                     Text(
                                         if (isCurrent) "▶" else "${idx + 1}.",
-                                        color = if (isCurrent) Palette.Accent else Palette.TextDim,
+                                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontWeight = FontWeight.SemiBold,
                                     )
                                     Text(
                                         item.title ?: item.uri,
-                                        color = Palette.Text,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         style = MaterialTheme.typography.bodyMedium,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -440,7 +431,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                             TextButton(onClick = { c.queueReorder(item.id, idx + 1) }, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(30.dp)) { Text("↓") }
                                         }
                                         TextButton(onClick = { c.queueRemove(item.id) }, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(30.dp)) {
-                                            Text("✕", color = Palette.Danger)
+                                            Text("✕", color = MaterialTheme.colorScheme.error)
                                         }
                                     }
                                 }
@@ -450,8 +441,8 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
 
                     // --- cast from a website or local phone file -------------------------------------------
                     Panel {
-                        Text("Cast from a website or phone storage", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
-                        Text("Find streams on any website with the built-in ad-blocking browser, or pick local videos, music or photos from your phone.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                        Text("Cast from a website or phone storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                        Text("Find streams on any website with the built-in ad-blocking browser, or pick local videos, music or photos from your phone.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         Button(onClick = onBrowse, enabled = st.canControl, modifier = Modifier.fillMaxWidth()) { Text("Find a video on a website") }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(
@@ -474,7 +465,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
 
                     // --- cast a link -----------------------------------------------------------------------
                     Panel {
-                        Text("Cast a link", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                        Text("Cast a link", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                         OutlinedTextField(
                             url, { url = it }, label = { Text("Direct video / audio / stream URL") }, singleLine = true,
                             modifier = Modifier.fillMaxWidth(), enabled = st.canControl,
@@ -501,33 +492,33 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                     if (history.isNotEmpty()) {
                         Panel {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                Text("Continue Watching & History", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
-                                TextButton(onClick = { rt.clearHistory() }) { Text("Clear", color = Palette.TextDim) }
+                                Text("Continue Watching & History", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                                TextButton(onClick = { rt.clearHistory() }) { Text("Clear", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                             }
                             history.take(6).forEach { entry ->
                                 Column(
                                     Modifier
                                         .fillMaxWidth()
-                                        .background(Palette.SurfaceHigh, RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(10.dp))
                                         .padding(10.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp),
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                             entry.title ?: entry.uri,
-                                            color = Palette.Text,
+                                            color = MaterialTheme.colorScheme.onSurface,
                                             style = MaterialTheme.typography.bodyMedium,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f),
                                         )
                                         TextButton(onClick = { rt.removeHistory(entry.uri) }, contentPadding = PaddingValues(0.dp), modifier = Modifier.size(28.dp)) {
-                                            Text("✕", color = Palette.TextDim)
+                                            Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                     }
                                     if (entry.lastPositionMs > 0) {
                                         val durText = entry.durationMs?.takeIf { it > 0 }?.let { " / ${formatTime(it)}" }.orEmpty()
-                                        Text("Left off at ${formatTime(entry.lastPositionMs)}$durText", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                                        Text("Left off at ${formatTime(entry.lastPositionMs)}$durText", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                                         if (entry.progressFraction > 0f) {
                                             LinearProgressIndicator(progress = { entry.progressFraction }, modifier = Modifier.fillMaxWidth())
                                         }
@@ -563,30 +554,13 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                 }
 
                 if (!st.canControl) {
-                    Panel { Text("This phone is an observer: it can see what is playing but cannot control the TV. Pair again and choose “Control playback” on the TV to change that.", color = Palette.Warn) }
+                    Panel { Text("This phone is an observer: it can see what is playing but cannot control the TV. Pair again and choose “Control playback” on the TV to change that.", color = MaterialTheme.status.warn) }
                 }
-                st.message?.let { Text(it, color = Palette.Warn, modifier = Modifier.padding(horizontal = 4.dp)) }
-                Text("Detached playback is active: if your phone sleeps or temporarily loses Wi-Fi, the TV keeps playing seamlessly.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 4.dp))
+                st.message?.let { Text(it, color = MaterialTheme.status.warn, modifier = Modifier.padding(horizontal = 4.dp)) }
+                Text("Detached playback is active: if your phone sleeps or temporarily loses Wi-Fi, the TV keeps playing seamlessly.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 4.dp))
             }
             Spacer(Modifier.height(24.dp))
         }
-    }
-}
-
-@Composable
-private fun TabPill(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        color = if (selected) Palette.Accent else androidx.compose.ui.graphics.Color.Transparent,
-        shape = RoundedCornerShape(10.dp),
-        modifier = modifier.clickable(onClick = onClick),
-    ) {
-        Text(
-            text = label,
-            color = if (selected) Palette.OnAccent else Palette.TextDim,
-            style = MaterialTheme.typography.labelLarge,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
-        )
     }
 }
 
@@ -617,7 +591,7 @@ private fun TvTouchpadAndDpadPanel(
 
     Panel {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("TV Remote", style = MaterialTheme.typography.titleMedium, color = Palette.Text)
+            Text("TV Remote", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(selected = useTouchpad, onClick = { useTouchpad = true }, label = { Text("Touchpad") })
                 FilterChip(selected = !useTouchpad, onClick = { useTouchpad = false }, label = { Text("D-Pad") })
@@ -662,8 +636,8 @@ private fun TvTouchpadAndDpadPanel(
                     .fillMaxWidth()
                     .height(250.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(Palette.SurfaceHigh)
-                    .border(1.5.dp, Palette.Accent.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
                     .pointerInput(canControl) {
                         if (!canControl) return@pointerInput
                         detectTapGestures(
@@ -708,21 +682,21 @@ private fun TvTouchpadAndDpadPanel(
                 contentAlignment = Alignment.Center,
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("▲", color = Palette.TextDim)
+                    Text("▲", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(horizontalArrangement = Arrangement.spacedBy(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("◀", color = Palette.TextDim)
+                        Text("◀", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Box(
                             Modifier
                                 .size(12.dp)
-                                .background(Palette.Accent, CircleShape)
+                                .background(MaterialTheme.colorScheme.primary, CircleShape)
                         )
-                        Text("▶", color = Palette.TextDim)
+                        Text("▶", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Text("▼", color = Palette.TextDim)
+                    Text("▼", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = lastGestureLabel,
-                        color = Palette.Text,
+                        color = MaterialTheme.colorScheme.onSurface,
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 16.dp),
@@ -737,8 +711,8 @@ private fun TvTouchpadAndDpadPanel(
                         .fillMaxWidth()
                         .height(48.dp)
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Palette.Surface)
-                        .border(1.dp, Palette.Outline, RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
                         .pointerInput(canControl) {
                             if (!canControl) return@pointerInput
                             detectDragGestures(
@@ -758,7 +732,7 @@ private fun TvTouchpadAndDpadPanel(
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("⇄  Slide horizontally here to scrub video (±10 s)", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                    Text("⇄  Slide horizontally here to scrub video (±10 s)", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         } else {
@@ -819,10 +793,11 @@ private fun TvTouchpadAndDpadPanel(
     }
 }
 
+@Composable
 private fun statusColor(s: PlaybackStatus) = when (s) {
-    PlaybackStatus.PLAYING -> Palette.Ok
-    PlaybackStatus.PAUSED, PlaybackStatus.READY -> Palette.Accent
-    PlaybackStatus.LOADING, PlaybackStatus.BUFFERING -> Palette.Warn
-    PlaybackStatus.ERROR -> Palette.Danger
-    else -> Palette.TextDim
+    PlaybackStatus.PLAYING -> MaterialTheme.status.ok
+    PlaybackStatus.PAUSED, PlaybackStatus.READY -> MaterialTheme.colorScheme.primary
+    PlaybackStatus.LOADING, PlaybackStatus.BUFFERING -> MaterialTheme.status.warn
+    PlaybackStatus.ERROR -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }

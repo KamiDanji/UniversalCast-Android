@@ -5,9 +5,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.tv.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -40,23 +41,21 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
     ScreenScaffold("Settings & diagnostics", onBack) {
         Row(horizontalArrangement = Arrangement.spacedBy(32.dp), modifier = Modifier.fillMaxSize()) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Card(Modifier.fillMaxWidth()) {
-                    Text("Receiver name", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
-                    Text(name, color = Palette.Text, style = MaterialTheme.typography.titleLarge)
+                InfoCard(Modifier.fillMaxWidth()) {
+                    Text("Receiver name", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text(name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                     TvButton("Rename", { editing = true }, primary = false)
                 }
-                Card(Modifier.fillMaxWidth()) {
-                    Text("Start when the TV turns on", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
-                    Text(
+                InfoCard(Modifier.fillMaxWidth()) {
+                    SettingSwitch(
+                        "Start when the TV turns on",
                         "Starts the receiver after the TV boots. Open the app once after installing (Android keeps new apps stopped " +
                             "until then). A TV in deep standby pauses all apps; phones can reach it again once it is fully on.",
-                        color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
-                    )
-                    TvButton(if (autostart) "On" else "Off", { rt.settings.setAutostartOnBoot(!autostart) }, primary = autostart)
+                        autostart,
+                    ) { rt.settings.setAutostartOnBoot(it) }
                 }
-                Card(Modifier.fillMaxWidth()) {
-                    Text("Open automatically when a phone casts", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
-                    TvButton(if (autoOpen) "On" else "Off", { rt.settings.setAutoOpenOnCast(!autoOpen) }, primary = autoOpen)
+                InfoCard(Modifier.fillMaxWidth()) {
+                    SettingSwitch("Open automatically when a phone casts", null, autoOpen) { rt.settings.setAutoOpenOnCast(it) }
                     InfoRow(
                         "“Display over other apps”",
                         if (overlayGranted) "granted" else "not granted – Android blocks opening the player from the background",
@@ -64,35 +63,35 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     if (!overlayGranted && OverlayPermission.canOpenSettings(ctx)) {
                         TvButton("Open permission screen", { OverlayPermission.openSettings(ctx) }, primary = false)
                     }
-                    Text("If this TV has no such screen, run once from a computer:", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
-                    Text(OverlayPermission.adbCommand(ctx), color = Palette.Text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
+                    Text("If this TV has no such screen, run once from a computer:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text(OverlayPermission.adbCommand(ctx), color = MaterialTheme.colorScheme.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
                 }
-                Card(Modifier.fillMaxWidth()) {
-                    Text("Player OSD & Ambient screen", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
+                InfoCard(Modifier.fillMaxWidth()) {
+                    Text("Player OSD & Ambient screen", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Shows a subtle 2-second floating pill in the corner when you seek, change volume/speed, or switch tracks from your phone.",
-                        color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                     )
-                    TvButton(if (showOsd) "On-screen status pill: On" else "On-screen status pill: Off", { rt.settings.setShowPlayerOsd(!showOsd) }, primary = showOsd)
-                    TvButton(if (autoAmbient) "Auto ambient clock when idle: On" else "Auto ambient clock when idle: Off", { rt.settings.setAutoAmbient(!autoAmbient) }, primary = autoAmbient)
+                    SettingSwitch("On-screen status pill", null, showOsd) { rt.settings.setShowPlayerOsd(it) }
+                    SettingSwitch("Auto ambient clock when idle", null, autoAmbient) { rt.settings.setAutoAmbient(it) }
                 }
-                Card(Modifier.fillMaxWidth()) {
-                    Text("Subtitle styling", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
-                    Text("Size", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                InfoCard(Modifier.fillMaxWidth()) {
+                    Text("Subtitle styling", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                    Text("Size", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for ((label, scale) in listOf("Small" to 0.8f, "Normal" to 1.0f, "Large" to 1.3f, "XL" to 1.65f)) {
                             val selected = abs(subStyle.fontScale - scale) < 0.08f
                             TvButton(label, { rt.updateSubtitleStyle(subStyle.copy(fontScale = scale)) }, primary = selected)
                         }
                     }
-                    Text("Background opacity", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                    Text("Background opacity", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for ((label, bg) in listOf("None" to 0.0f, "Dim" to 0.55f, "Solid" to 0.9f)) {
                             val selected = abs(subStyle.backgroundOpacity - bg) < 0.1f
                             TvButton(label, { rt.updateSubtitleStyle(subStyle.copy(backgroundOpacity = bg)) }, primary = selected)
                         }
                     }
-                    Text("Bottom margin", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                    Text("Bottom margin", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for ((label, pad) in listOf("Low" to 0.04f, "Normal" to 0.08f, "High" to 0.14f)) {
                             val selected = abs(subStyle.bottomPaddingFraction - pad) < 0.02f
@@ -100,34 +99,34 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                         }
                     }
                 }
-                Card(Modifier.fillMaxWidth()) {
-                    Text("Phone TV Remote (Touchpad & D-Pad)", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
+                InfoCard(Modifier.fillMaxWidth()) {
+                    Text("Phone TV Remote (Touchpad & D-Pad)", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Your phone can control UniversalCast and TV volume immediately. To also use the phone touchpad across other Android TV apps and Home screen, enable “UniversalCast Phone Remote” in Accessibility settings.",
-                        color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                     )
                     InfoRow("System-wide TV navigation", if (a11yGranted) "enabled" else "in-app + volume only (optional Accessibility service off)")
                     TvButton("Open Accessibility settings", { TvRemoteDispatcher.openAccessibilitySettings(ctx) }, primary = false)
                 }
-                Card(Modifier.fillMaxWidth()) {
+                InfoCard(Modifier.fillMaxWidth()) {
                     val updates = (ctx.applicationContext as com.universalcast.receiver.UniversalCastApp).updates
                     val us by updates.state.collectAsState()
-                    Text("App version", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
-                    Text(updates.currentVersion, color = Palette.Text, style = MaterialTheme.typography.titleLarge)
+                    Text("App version", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text(updates.currentVersion, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                     TvButton(
                         if (us is com.universalcast.updater.UpdateState.Checking) "Checking…" else "Check for updates",
                         { updates.checkNow() }, primary = false, enabled = us !is com.universalcast.updater.UpdateState.Checking,
                     )
                 }
-                Card(Modifier.fillMaxWidth()) {
+                InfoCard(Modifier.fillMaxWidth()) {
                     InfoRow("Mode", rt.config.mode.wire)
                     InfoRow("Transport", "WSS (TLS 1.2/1.3 only), authentication required")
                     InfoRow("Status", if (running) "listening on port ${rt.core.boundPort}" else "stopped")
                     InfoRow("Addresses", NetworkAddresses.local().joinToString().ifEmpty { "none" })
                     InfoRow("mDNS", if (running) "_universalcast._tcp, id ${rt.identity.deviceId}" else "off")
                     InfoRow("Identity", "Android Keystore (EC P-256, non-exportable)")
-                    Text("Fingerprint (SHA-256)", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
-                    Text(Fingerprint.display(rt.identity.fingerprint), color = Palette.Text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
+                    Text("Fingerprint (SHA-256)", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    Text(Fingerprint.display(rt.identity.fingerprint), color = MaterialTheme.colorScheme.onSurface, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
                     InfoRow("Paired-device store", when (rt.registryOutcome) {
                         LoadOutcome.FRESH -> "new"; LoadOutcome.LOADED -> "loaded"; LoadOutcome.MIGRATED -> "migrated"
                         LoadOutcome.CORRUPT_RESET -> "was corrupt – reset"; LoadOutcome.UNSUPPORTED_VERSION_RESET -> "newer version – set aside"
@@ -135,11 +134,11 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     })
                 }
             }
-            Card(Modifier.weight(1f).fillMaxHeight()) {
-                Text("Event log", color = Palette.TextDim, style = MaterialTheme.typography.titleMedium)
+            InfoCard(Modifier.weight(1f).fillMaxHeight()) {
+                Text("Event log", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(entries) { e ->
-                        val c = when (e.level) { "ERROR" -> Palette.Danger; "WARN" -> Palette.Warn; else -> Palette.TextDim }
+                        val c = when (e.level) { "ERROR" -> MaterialTheme.colorScheme.error; "WARN" -> MaterialTheme.status.warn; else -> MaterialTheme.colorScheme.onSurfaceVariant }
                         Text("${formatTime(e.atMs % 86_400_000)} ${e.level}  ${e.message}", color = c, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
                     }
                 }
@@ -147,17 +146,30 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
         }
     }
 
-    if (editing) AlertDialog(
-        onDismissRequest = { editing = false },
-        containerColor = Palette.Surface,
-        title = { Text("Receiver name", color = Palette.Text) },
-        text = { OutlinedTextField(draft, { draft = it.take(40) }, singleLine = true) },
-        confirmButton = { TvButton("Save", { rt.setName(draft); editing = false }) },
-        dismissButton = { TvButton("Cancel", { editing = false }, primary = false) },
+    if (editing) TvDialog(
+        title = "Receiver name",
+        onDismiss = { editing = false },
+        buttons = {
+            TvButton("Save", { rt.setName(draft); editing = false })
+            TvButton("Cancel", { editing = false }, primary = false)
+        },
+    ) { TvTextField(draft, { draft = it.take(40) }) }
+}
+
+/** One setting row: label, optional explanation, and a TV Material switch; a single OK press toggles it. */
+@Composable
+private fun SettingSwitch(title: String, description: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+    ListItem(
+        selected = false,
+        onClick = { onChange(!checked) },
+        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        supportingContent = description?.let { d -> { Text(d, style = MaterialTheme.typography.bodyMedium) } },
+        trailingContent = { Switch(checked = checked, onCheckedChange = null) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
     )
 }
 
 @Composable
 private fun InfoRow(label: String, value: String) {
-    Column { Text(label, color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium); Text(value, color = Palette.Text, style = MaterialTheme.typography.bodyLarge) }
+    Column { Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium); Text(value, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge) }
 }

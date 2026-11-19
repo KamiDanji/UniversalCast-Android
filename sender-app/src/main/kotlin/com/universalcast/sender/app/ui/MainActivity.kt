@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -24,6 +25,8 @@ class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // System splash (icon on the theme background); the animated in-app splash continues from the same logo.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) handleShare(intent)
         // Android 13+: the "connected to TV" notification needs this; without it the service still runs, just unseen.
@@ -51,7 +54,7 @@ class MainActivity : ComponentActivity() {
                         onBrowse = { screen = Screen.BROWSER },
                         onAbout = { screen = Screen.ABOUT },
                     )
-                    Screen.PAIR -> PairScreen(vm) { screen = Screen.HOME }
+                    Screen.PAIR -> PairScreen(vm, onClose = { screen = Screen.HOME }, onOpenRemote = { screen = Screen.REMOTE })
                     Screen.REMOTE -> RemoteScreen(vm, onClose = { screen = Screen.HOME }, onPairAgain = { screen = Screen.PAIR }, onBrowse = { screen = Screen.BROWSER })
                     // The browser shows the remote as an overlay itself, so the page stays loaded underneath.
                     Screen.BROWSER -> BrowserScreen(vm, onClose = { screen = Screen.HOME }, onPairAgain = { screen = Screen.PAIR })

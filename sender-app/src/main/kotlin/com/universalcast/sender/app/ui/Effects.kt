@@ -24,25 +24,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.gestures.detectTapGestures
 import kotlinx.coroutines.delay
-
-/** App-wide backdrop: deep navy gradient with soft accent glows in two corners. */
-fun Modifier.appBackground(): Modifier = this
-    .background(Brush.verticalGradient(listOf(Color(0xFF111A2E), Palette.Background, Color(0xFF070A10))))
-    .drawBehind {
-        drawRect(
-            Brush.radialGradient(
-                listOf(Palette.Accent.copy(alpha = 0.20f), Color.Transparent),
-                center = Offset(size.width * 0.9f, 0f), radius = size.maxDimension * 0.65f,
-            ),
-        )
-        drawRect(
-            Brush.radialGradient(
-                listOf(Color(0xFF8A5BFF).copy(alpha = 0.10f), Color.Transparent),
-                center = Offset(0f, size.height), radius = size.maxDimension * 0.6f,
-            ),
-        )
-    }
+import kotlinx.coroutines.launch
 
 /** Fades and slides a composable in once, [delayMs] after it first appears. */
 @Composable
@@ -52,61 +36,70 @@ fun Modifier.reveal(delayMs: Int = 0): Modifier {
     return this.graphicsLayer { alpha = p.value; translationY = (1f - p.value) * 36f }
 }
 
-/** Launch animation: the screen-with-play logo springs in, cast waves ripple out of it, the name fades up, then it dissolves. */
+/**
+ * Launch animation, drawn with the live Material 3 colours (so it matches whichever theme/wallpaper colours are active):
+ * a tonal disc holding the screen-with-play glyph, cast ripples leaving it, then the wordmark and tagline.
+ * Tap anywhere to skip.
+ */
 @Composable
 fun SplashOverlay(onDone: () -> Unit) {
-    val logo = remember { Animatable(0f) }
+    val scheme = MaterialTheme.colorScheme
+    val logo = remember { Animatable(0.82f) }
     val title = remember { Animatable(0f) }
     val exit = remember { Animatable(1f) }
     val waves = rememberInfiniteTransition(label = "waves")
-    val wave by waves.animateFloat(0f, 1f, infiniteRepeatable(tween(1500, easing = LinearEasing)), label = "wave")
+    val wave by waves.animateFloat(0f, 1f, infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "wave")
+    var finished by remember { mutableStateOf(false) }
+    fun finish() { if (!finished) { finished = true; onDone() } }
     LaunchedEffect(Unit) {
-        logo.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 140f))
-        title.animateTo(1f, tween(450))
-        delay(650)
-        exit.animateTo(0f, tween(380))
-        onDone()
+        launch { logo.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 180f)) }
+        delay(180)
+        title.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+        delay(750)
+        exit.animateTo(0f, tween(320))
+        finish()
     }
     Box(
-        Modifier.fillMaxSize().graphicsLayer { alpha = exit.value }.appBackground(),
+        Modifier.fillMaxSize()
+            .graphicsLayer { alpha = exit.value; scaleX = 1f + (1f - exit.value) * 0.04f; scaleY = 1f + (1f - exit.value) * 0.04f }
+            .background(scheme.surface)
+            .pointerInput(Unit) { detectTapGestures { finish() } },
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Canvas(Modifier.size(260.dp)) {
+            Canvas(Modifier.size(240.dp)) {
                 val c = center
                 val l = logo.value
                 for (i in 0..2) {
                     val t = (wave + i / 3f) % 1f
                     drawCircle(
-                        Palette.Accent.copy(alpha = ((1f - t) * 0.35f * l).coerceIn(0f, 1f)), radius = size.minDimension * (0.28f + 0.22f * t),
-                        center = c, style = Stroke(width = 3.dp.toPx()),
+                        scheme.primary.copy(alpha = ((1f - t) * 0.30f).coerceIn(0f, 1f)),
+                        radius = size.minDimension * (0.30f + 0.20f * t), center = c, style = Stroke(width = 2.5.dp.toPx()),
                     )
                 }
-                val w = size.minDimension * 0.62f * l
+                drawCircle(scheme.primaryContainer, radius = size.minDimension * 0.30f * l, center = c)
+                // Glyph: screen with a play cut-out and a stand.
+                val w = size.minDimension * 0.30f * l
                 val h = w * 0.68f
-                val tl = Offset(c.x - w / 2, c.y - h / 2 - 6.dp.toPx())
-                drawRoundRect(
-                    Brush.linearGradient(listOf(Color(0xFF7AA2FF), Palette.Accent, Color(0xFF8A5BFF)), tl, Offset(tl.x + w, tl.y + h)),
-                    tl, Size(w, h), CornerRadius(14.dp.toPx() * l),
-                )
-                val cy = c.y - 6.dp.toPx()
+                val top = Offset(c.x - w / 2, c.y - h / 2 - 5.dp.toPx() * l)
+                drawRoundRect(scheme.onPrimaryContainer, top, Size(w, h), CornerRadius(7.dp.toPx() * l))
                 val tri = Path().apply {
-                    moveTo(c.x - w * 0.10f, cy - h * 0.22f); lineTo(c.x + w * 0.16f, cy)
-                    lineTo(c.x - w * 0.10f, cy + h * 0.22f); close()
+                    moveTo(c.x - w * 0.11f, top.y + h * 0.28f); lineTo(c.x + w * 0.17f, top.y + h * 0.5f)
+                    lineTo(c.x - w * 0.11f, top.y + h * 0.72f); close()
                 }
-                drawPath(tri, Palette.Background.copy(alpha = l.coerceIn(0f, 1f)))
+                drawPath(tri, scheme.primaryContainer)
                 drawRoundRect(
-                    Palette.Accent.copy(alpha = l.coerceIn(0f, 1f)), Offset(c.x - w * 0.2f, tl.y + h + 8.dp.toPx()),
-                    Size(w * 0.4f, 5.dp.toPx()), CornerRadius(3.dp.toPx()),
+                    scheme.onPrimaryContainer, Offset(c.x - w * 0.2f, top.y + h + 7.dp.toPx() * l),
+                    Size(w * 0.4f, 4.dp.toPx() * l), CornerRadius(2.dp.toPx()),
                 )
             }
             Text(
-                "UniversalCast", color = Palette.Text, fontSize = 34.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp,
-                modifier = Modifier.graphicsLayer { alpha = title.value; translationY = (1f - title.value) * 24f },
+                "UniversalCast", color = scheme.onSurface, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.graphicsLayer { alpha = title.value; translationY = (1f - title.value) * 28f },
             )
             Text(
-                "Cast anything to your TV", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.graphicsLayer { alpha = title.value }.padding(top = 6.dp),
+                "Cast anything to your TV", color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.graphicsLayer { alpha = title.value; translationY = (1f - title.value) * 16f }.padding(top = 4.dp),
             )
         }
     }

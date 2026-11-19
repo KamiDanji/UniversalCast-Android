@@ -1,4 +1,6 @@
 <resources>
-    <color name="background">#0B0F17</color>
-    <color name="ic_background">#0B0F17</color>
+    <!-- Window / splash background before Compose draws; matches the Material 3 neutral surface (light). -->
+    <color name="background">#FDFBFF</color>
+    <color name="splash_bg">#FDFBFF</color>
+    <color name="ic_background">#1B2B5C</color>
 </resources>

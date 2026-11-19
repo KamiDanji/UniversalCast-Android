@@ -3,16 +3,15 @@ package com.universalcast.receiver.ui
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -21,28 +20,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-/** App-wide backdrop: deep navy gradient with soft accent glows in two corners. */
-fun Modifier.appBackground(): Modifier = this
-    .background(Brush.verticalGradient(listOf(Color(0xFF111A2E), Palette.Background, Color(0xFF070A10))))
-    .drawBehind {
-        drawRect(
-            Brush.radialGradient(
-                listOf(Palette.Accent.copy(alpha = 0.20f), Color.Transparent),
-                center = Offset(size.width * 0.9f, 0f), radius = size.maxDimension * 0.65f,
-            ),
-        )
-        drawRect(
-            Brush.radialGradient(
-                listOf(Color(0xFF8A5BFF).copy(alpha = 0.10f), Color.Transparent),
-                center = Offset(0f, size.height), radius = size.maxDimension * 0.6f,
-            ),
-        )
-    }
+/** App backdrop: the TV Material background with one soft tonal glow in the top-right corner. */
+@Composable
+fun Modifier.appBackground(): Modifier {
+    val bg = MaterialTheme.colorScheme.background
+    val glow = MaterialTheme.colorScheme.primaryContainer
+    return this
+        .background(bg)
+        .drawBehind {
+            drawRect(
+                Brush.radialGradient(
+                    listOf(glow.copy(alpha = 0.40f), Color.Transparent),
+                    center = Offset(size.width * 0.92f, 0f), radius = size.maxDimension * 0.6f,
+                ),
+            )
+        }
+}
 
 /** Fades and slides a composable in once, [delayMs] after it first appears. */
 @Composable
@@ -52,67 +53,77 @@ fun Modifier.reveal(delayMs: Int = 0): Modifier {
     return this.graphicsLayer { alpha = p.value; translationY = (1f - p.value) * 36f }
 }
 
-/** Launch animation: the screen-with-play logo springs in, cast waves ripple out of it, the name fades up, then it dissolves. */
+/**
+ * Launch animation in the TV Material colours: a tonal disc holding the screen-with-play glyph, cast ripples leaving it,
+ * then the wordmark and tagline. Any remote key skips it.
+ */
 @Composable
 fun SplashOverlay(onDone: () -> Unit) {
-    val logo = remember { Animatable(0f) }
+    val cs = MaterialTheme.colorScheme
+    val logo = remember { Animatable(0.8f) }
     val title = remember { Animatable(0f) }
     val exit = remember { Animatable(1f) }
     val waves = rememberInfiniteTransition(label = "waves")
-    val wave by waves.animateFloat(0f, 1f, infiniteRepeatable(tween(1500, easing = LinearEasing)), label = "wave")
+    val wave by waves.animateFloat(0f, 1f, infiniteRepeatable(tween(1700, easing = LinearEasing)), label = "wave")
+    var finished by remember { mutableStateOf(false) }
+    fun finish() { if (!finished) { finished = true; onDone() } }
+    val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
-        logo.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = 140f))
-        title.animateTo(1f, tween(450))
-        delay(650)
-        exit.animateTo(0f, tween(380))
-        onDone()
+        runCatching { focus.requestFocus() }
+        launch { logo.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 160f)) }
+        delay(200)
+        title.animateTo(1f, tween(450, easing = FastOutSlowInEasing))
+        delay(900)
+        exit.animateTo(0f, tween(350))
+        finish()
     }
     Box(
-        Modifier.fillMaxSize().graphicsLayer { alpha = exit.value }.appBackground(),
+        Modifier.fillMaxSize()
+            .graphicsLayer { alpha = exit.value; scaleX = 1f + (1f - exit.value) * 0.04f; scaleY = 1f + (1f - exit.value) * 0.04f }
+            .appBackground()
+            .focusRequester(focus).focusable()
+            .onPreviewKeyEvent { finish(); true },
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Canvas(Modifier.size(260.dp)) {
+            Canvas(Modifier.size(340.dp)) {
                 val c = center
                 val l = logo.value
                 for (i in 0..2) {
                     val t = (wave + i / 3f) % 1f
                     drawCircle(
-                        Palette.Accent.copy(alpha = ((1f - t) * 0.35f * l).coerceIn(0f, 1f)), radius = size.minDimension * (0.28f + 0.22f * t),
-                        center = c, style = Stroke(width = 3.dp.toPx()),
+                        cs.primary.copy(alpha = ((1f - t) * 0.30f).coerceIn(0f, 1f)),
+                        radius = size.minDimension * (0.30f + 0.20f * t), center = c, style = Stroke(width = 3.dp.toPx()),
                     )
                 }
-                val w = size.minDimension * 0.62f * l
+                drawCircle(cs.primaryContainer, radius = size.minDimension * 0.30f * l, center = c)
+                val w = size.minDimension * 0.30f * l
                 val h = w * 0.68f
-                val tl = Offset(c.x - w / 2, c.y - h / 2 - 6.dp.toPx())
-                drawRoundRect(
-                    Brush.linearGradient(listOf(Color(0xFF7AA2FF), Palette.Accent, Color(0xFF8A5BFF)), tl, Offset(tl.x + w, tl.y + h)),
-                    tl, Size(w, h), CornerRadius(14.dp.toPx() * l),
-                )
-                val cy = c.y - 6.dp.toPx()
+                val top = Offset(c.x - w / 2, c.y - h / 2 - 7.dp.toPx() * l)
+                drawRoundRect(cs.onPrimaryContainer, top, Size(w, h), CornerRadius(9.dp.toPx() * l))
                 val tri = Path().apply {
-                    moveTo(c.x - w * 0.10f, cy - h * 0.22f); lineTo(c.x + w * 0.16f, cy)
-                    lineTo(c.x - w * 0.10f, cy + h * 0.22f); close()
+                    moveTo(c.x - w * 0.11f, top.y + h * 0.28f); lineTo(c.x + w * 0.17f, top.y + h * 0.5f)
+                    lineTo(c.x - w * 0.11f, top.y + h * 0.72f); close()
                 }
-                drawPath(tri, Palette.Background.copy(alpha = l.coerceIn(0f, 1f)))
+                drawPath(tri, cs.primaryContainer)
                 drawRoundRect(
-                    Palette.Accent.copy(alpha = l.coerceIn(0f, 1f)), Offset(c.x - w * 0.2f, tl.y + h + 8.dp.toPx()),
-                    Size(w * 0.4f, 5.dp.toPx()), CornerRadius(3.dp.toPx()),
+                    cs.onPrimaryContainer, Offset(c.x - w * 0.2f, top.y + h + 9.dp.toPx() * l),
+                    Size(w * 0.4f, 5.dp.toPx() * l), CornerRadius(3.dp.toPx()),
                 )
             }
             Text(
-                "UniversalCast", color = Palette.Text, fontSize = 34.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp,
-                modifier = Modifier.graphicsLayer { alpha = title.value; translationY = (1f - title.value) * 24f },
+                "UniversalCast", color = cs.onSurface, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.graphicsLayer { alpha = title.value; translationY = (1f - title.value) * 30f },
             )
             Text(
-                "Cast anything to your TV", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.graphicsLayer { alpha = title.value }.padding(top = 6.dp),
+                "Receiver", color = cs.onSurfaceVariant, style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.graphicsLayer { alpha = title.value; translationY = (1f - title.value) * 18f }.padding(top = 4.dp),
             )
         }
     }
 }
 
-/** A small dot that gently pulses: marks something live (connected, nearby, connecting). */
+/** A small dot that gently pulses: marks something live (connected, ready, connecting). */
 @Composable
 fun PulseDot(color: Color, size: androidx.compose.ui.unit.Dp = 8.dp) {
     val t = rememberInfiniteTransition(label = "pulse")
@@ -120,22 +131,6 @@ fun PulseDot(color: Color, size: androidx.compose.ui.unit.Dp = 8.dp) {
     Box(
         Modifier.size(size)
             .graphicsLayer { alpha = a; scaleX = 0.8f + 0.4f * a; scaleY = 0.8f + 0.4f * a }
-            .background(color, androidx.compose.foundation.shape.CircleShape),
+            .background(color, CircleShape),
     )
-}
-
-/** Presses shrink the element slightly and spring back; observes touches without consuming them. */
-fun Modifier.pressScale(): Modifier = composed {
-    var pressed by remember { mutableStateOf(false) }
-    val s by animateFloatAsState(if (pressed) 0.94f else 1f, spring(dampingRatio = 0.5f, stiffness = 500f), label = "press")
-    this
-        .pointerInput(Unit) {
-            awaitPointerEventScope {
-                while (true) {
-                    val e = awaitPointerEvent(PointerEventPass.Initial)
-                    pressed = e.changes.any { it.pressed }
-                }
-            }
-        }
-        .graphicsLayer { scaleX = s; scaleY = s }
 }

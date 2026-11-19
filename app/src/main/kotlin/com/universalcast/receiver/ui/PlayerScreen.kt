@@ -18,10 +18,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -136,11 +134,7 @@ fun PlayerScreen(
         val busy = snapshot.error == null &&
             (snapshot.status == PlaybackStatus.LOADING || snapshot.status == PlaybackStatus.BUFFERING)
         if (busy) {
-            CircularProgressIndicator(
-                color = Palette.Text.copy(alpha = 0.85f),
-                strokeWidth = 4.dp,
-                modifier = Modifier.align(Alignment.Center).size(56.dp),
-            )
+            TvSpinner(Modifier.align(Alignment.Center).size(56.dp))
         }
 
         AnimatedVisibility(
@@ -151,13 +145,13 @@ fun PlayerScreen(
         ) {
             Box(
                 Modifier
-                    .background(Color(0xCC0D131F), RoundedCornerShape(999.dp))
-                    .border(1.dp, Palette.Accent.copy(alpha = 0.45f), RoundedCornerShape(999.dp))
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), RoundedCornerShape(999.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(999.dp))
                     .padding(horizontal = 20.dp, vertical = 10.dp),
             ) {
                 Text(
                     text = visibleToast.orEmpty(),
-                    color = Palette.Text,
+                    color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.titleMedium,
                 )
             }
@@ -170,9 +164,9 @@ fun PlayerScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("Playback problem", color = Palette.Danger, style = MaterialTheme.typography.titleLarge)
-                Text(e.message, color = Palette.Text, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-                Text("Try again from your phone, or press Back to leave.", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                Text("Playback problem", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleLarge)
+                Text(e.message, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+                Text("Try again from your phone, or press Back to leave.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -192,8 +186,8 @@ private fun AudioVisualizerOverlay(snapshot: PlaybackSnapshot, modifier: Modifie
     Column(
         modifier = modifier
             .widthIn(min = 420.dp, max = 640.dp)
-            .background(Color(0xD9121A28), RoundedCornerShape(28.dp))
-            .border(1.dp, Palette.Outline, RoundedCornerShape(28.dp))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f), RoundedCornerShape(28.dp))
+            .border(1.dp, MaterialTheme.colorScheme.border, RoundedCornerShape(28.dp))
             .padding(36.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -210,13 +204,13 @@ private fun AudioVisualizerOverlay(snapshot: PlaybackSnapshot, modifier: Modifie
                         .width(12.dp)
                         .fillMaxHeight(frac)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Palette.Accent)
+                        .background(MaterialTheme.colorScheme.primary)
                 )
             }
         }
         Text(
             text = snapshot.title ?: snapshot.mediaUri ?: "Audio Stream",
-            color = Palette.Text,
+            color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.headlineMedium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -225,17 +219,17 @@ private fun AudioVisualizerOverlay(snapshot: PlaybackSnapshot, modifier: Modifie
         val dur = snapshot.durationMs
         if (dur != null && dur > 0) {
             val progress = (snapshot.positionMs.toFloat() / dur.toFloat()).coerceIn(0f, 1f)
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)))
+            TvProgressBar(progress, Modifier.fillMaxWidth(), height = 6.dp)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(formatTime(snapshot.positionMs), color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
-                Text(formatTime(dur), color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                Text(formatTime(snapshot.positionMs), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                Text(formatTime(dur), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
         } else {
-            Text(formatTime(snapshot.positionMs), color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+            Text(formatTime(snapshot.positionMs), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
         if (snapshot.queue.size > 1 && snapshot.queueIndex + 1 in snapshot.queue.indices) {
             val nextTitle = snapshot.queue[snapshot.queueIndex + 1].title ?: snapshot.queue[snapshot.queueIndex + 1].uri
-            Text("Up next: $nextTitle", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Up next: $nextTitle", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

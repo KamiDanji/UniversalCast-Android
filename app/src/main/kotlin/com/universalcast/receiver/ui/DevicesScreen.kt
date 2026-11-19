@@ -3,7 +3,7 @@ package com.universalcast.receiver.ui
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
+import androidx.tv.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,20 +18,20 @@ fun DevicesScreen(vm: AppViewModel, onBack: () -> Unit) {
 
     ScreenScaffold("Paired devices", onBack) {
         if (senders.isEmpty()) {
-            Text("No devices are paired yet.", color = Palette.TextDim, style = MaterialTheme.typography.titleLarge)
+            Text("No devices are paired yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleLarge)
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 items(senders, key = { it.senderId }) { s ->
-                    Card(Modifier.fillMaxWidth()) {
+                    InfoCard(Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(s.name, style = MaterialTheme.typography.titleLarge, color = Palette.Text)
-                                Text("ID ${s.senderId.take(12)}… · paired ${formatDate(s.pairedAtMs)} · last seen ${formatDate(s.lastConnectedAtMs)}", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                                Text(s.name, style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                                Text("ID ${s.senderId.take(12)}… · paired ${formatDate(s.pairedAtMs)} · last seen ${formatDate(s.lastConnectedAtMs)}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    if (s.isRevoked) Chip("Revoked ${formatDate(s.revokedAtMs)}", Palette.Danger)
+                                    if (s.isRevoked) Chip("Revoked ${formatDate(s.revokedAtMs)}", MaterialTheme.colorScheme.error)
                                     else {
-                                        Chip(s.role.name.lowercase().replaceFirstChar { it.uppercase() }, Palette.Accent)
-                                        if (connected.any { it.senderId == s.senderId }) Chip("Connected", Palette.Ok, live = true)
+                                        Chip(s.role.name.lowercase().replaceFirstChar { it.uppercase() }, MaterialTheme.colorScheme.primary)
+                                        if (connected.any { it.senderId == s.senderId }) Chip("Connected", MaterialTheme.status.ok, live = true)
                                     }
                                 }
                             }
@@ -44,13 +44,15 @@ fun DevicesScreen(vm: AppViewModel, onBack: () -> Unit) {
     }
 
     confirm?.let { s ->
-        AlertDialog(
-            onDismissRequest = { confirm = null },
-            containerColor = Palette.Surface,
-            title = { Text("Revoke “${s.name}”?", color = Palette.Text) },
-            text = { Text("It will be disconnected immediately, playback it controls stops, and it can only return through a new pairing.", color = Palette.TextDim) },
-            confirmButton = { TvButton("Revoke", { vm.revoke(s.senderId); confirm = null }, danger = true) },
-            dismissButton = { TvButton("Keep", { confirm = null }, primary = false) },
-        )
+        TvDialog(
+            title = "Revoke “${s.name}”?",
+            onDismiss = { confirm = null },
+            buttons = {
+                TvButton("Keep", { confirm = null }, primary = false)
+                TvButton("Revoke", { vm.revoke(s.senderId); confirm = null }, danger = true)
+            },
+        ) {
+            Text("It will be disconnected immediately, playback it controls stops, and it can only return through a new pairing.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+        }
     }
 }

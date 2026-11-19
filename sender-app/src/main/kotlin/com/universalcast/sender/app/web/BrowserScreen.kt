@@ -55,7 +55,7 @@ import com.universalcast.sender.StreamProbe
 import com.universalcast.sender.SubtitleCandidate
 import com.universalcast.sender.app.ui.AppViewModel
 import com.universalcast.sender.app.ui.Chip
-import com.universalcast.sender.app.ui.Palette
+import com.universalcast.sender.app.ui.status
 import com.universalcast.sender.app.ui.RemoteScreen
 import com.universalcast.sender.app.ui.formatTime
 import kotlinx.coroutines.Dispatchers
@@ -331,13 +331,13 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = Palette.Background,
+            containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
-                Column(Modifier.background(Palette.Surface).statusBarsPadding()) {
+                Column(Modifier.background(MaterialTheme.colorScheme.surfaceContainer).statusBarsPadding()) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         // Back only navigates back in the page history; closing is in the menu.
                         IconButton(onClick = { webView?.takeIf { it.canGoBack() }?.goBack() }, enabled = canGoBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = if (canGoBack) Palette.Text else Palette.TextDim)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = if (canGoBack) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         OutlinedTextField(
                             value = address, onValueChange = { address = it; addressError = false }, singleLine = true,
@@ -349,9 +349,9 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                             textStyle = MaterialTheme.typography.bodyMedium,
                             shape = RoundedCornerShape(24.dp),
                         )
-                        IconButton(onClick = { webView?.reload() }) { Icon(Icons.Filled.Refresh, "Reload", tint = Palette.Text) }
+                        IconButton(onClick = { webView?.reload() }) { Icon(Icons.Filled.Refresh, "Reload", tint = MaterialTheme.colorScheme.onSurface) }
                         Box {
-                            IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Menu", tint = Palette.Text) }
+                            IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Menu", tint = MaterialTheme.colorScheme.onSurface) }
                             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                                 val currentUrl = page.currentPageUrl
                                 if (!currentUrl.isNullOrBlank()) {
@@ -383,7 +383,7 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                 }
             },
             bottomBar = {
-                Surface(color = Palette.Surface) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
                     Row(
                         Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -393,7 +393,7 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                                 Text("▶ ${streams.size} video${if (streams.size == 1) "" else "s"} found – Cast")
                             }
                         } else {
-                            Text("Play the video on the page to find it", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                            Text("Play the video on the page to find it", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                         }
                         TextButton(onClick = { scanPage() }, enabled = !scanning && webView != null) { Text(if (scanning) "Scanning…" else "Scan page") }
                         if (st.phase == ConnectionPhase.CONNECTED) TextButton(onClick = { showRemote = true }) { Text("Remote") }
@@ -516,35 +516,35 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                 }
                 if (address.isEmpty()) {
                     LazyColumn(
-                        Modifier.fillMaxSize().background(Palette.Background).padding(24.dp),
+                        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         item {
-                            Text("Cast from a website", style = MaterialTheme.typography.titleMedium, color = Palette.Text)
+                            Text("Cast from a website", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                             Spacer(Modifier.height(6.dp))
                             Text(
                                 "Open the page with the video and start it playing. UniversalCast finds the stream the page plays " +
                                     "(HLS .m3u8, DASH, MP4…) and casts it to your TV.",
-                                color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                             )
                         }
                         if (bookmarks.isNotEmpty()) {
                             item {
                                 Spacer(Modifier.height(8.dp))
-                                Text("Bookmarks", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                                Text("Bookmarks", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                             }
                             items(bookmarks, key = { it.url }) { bm ->
                                 Surface(
-                                    color = Palette.Surface,
+                                    color = MaterialTheme.colorScheme.surfaceContainer,
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().clickable { address = bm.url; go(bm.url) },
                                 ) {
                                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
-                                            Text("★ ${bm.title}", color = Palette.Text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            Text(bm.url, color = Palette.TextDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text("★ ${bm.title}", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(bm.url, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
-                                        TextButton(onClick = { rt.removeBookmark(bm.url) }) { Text("✕", color = Palette.TextDim) }
+                                        TextButton(onClick = { rt.removeBookmark(bm.url) }) { Text("✕", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                                     }
                                 }
                             }
@@ -553,18 +553,18 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                         if (recentPages.isNotEmpty()) {
                             item {
                                 Spacer(Modifier.height(8.dp))
-                                Text("Recent Video Pages", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                                Text("Recent Video Pages", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                             }
                             items(recentPages, key = { it.pageUrl!! }) { entry ->
                                 val pg = entry.pageUrl!!
                                 Surface(
-                                    color = Palette.Surface,
+                                    color = MaterialTheme.colorScheme.surfaceContainer,
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().clickable { address = pg; go(pg) },
                                 ) {
                                     Column(Modifier.padding(12.dp)) {
-                                        Text(entry.title ?: pg, color = Palette.Text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(pg, color = Palette.TextDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(entry.title ?: pg, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(pg, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
                             }
@@ -572,9 +572,9 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                     }
                 }
                 notice?.let { n ->
-                    Surface(color = Palette.SurfaceHigh, shape = RoundedCornerShape(12.dp), modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) {
+                    Surface(color = MaterialTheme.colorScheme.surfaceContainerHighest, shape = RoundedCornerShape(12.dp), modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp)) {
                         Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(n, color = Palette.Text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f, fill = false))
+                            Text(n, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { notice = null }) { Text("OK") }
                         }
                     }
@@ -583,16 +583,16 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
         }
 
         if (showBookmarks) {
-            ModalBottomSheet(onDismissRequest = { showBookmarks = false }, containerColor = Palette.Surface) {
+            ModalBottomSheet(onDismissRequest = { showBookmarks = false }, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Bookmarks", style = MaterialTheme.typography.titleMedium, color = Palette.Text)
+                    Text("Bookmarks", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                     if (bookmarks.isEmpty()) {
-                        Text("No bookmarks yet. Open a website and choose “☆ Bookmark this page” in the ⋮ menu.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                        Text("No bookmarks yet. Open a website and choose “☆ Bookmark this page” in the ⋮ menu.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     } else {
                         LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(bookmarks, key = { it.url }) { bm ->
                                 Surface(
-                                    color = Palette.SurfaceHigh,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.fillMaxWidth().clickable {
                                         showBookmarks = false
@@ -602,10 +602,10 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                                 ) {
                                     Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
-                                            Text(bm.title, color = Palette.Text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                            Text(bm.url, color = Palette.TextDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(bm.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(bm.url, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         }
-                                        TextButton(onClick = { rt.removeBookmark(bm.url) }) { Text("Remove", color = Palette.Danger) }
+                                        TextButton(onClick = { rt.removeBookmark(bm.url) }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
                                     }
                                 }
                             }
@@ -616,7 +616,7 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
         }
 
         if (showSheet) {
-            ModalBottomSheet(onDismissRequest = { showSheet = false }, containerColor = Palette.Surface) {
+            ModalBottomSheet(onDismissRequest = { showSheet = false }, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                 CastSheet(
                     streams = streams, subtitles = subtitles,
                     tvName = st.receiver?.name?.takeIf { st.phase != ConnectionPhase.DISCONNECTED }
@@ -652,7 +652,7 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                 text = {
                     Column {
                         receivers.forEach { r: PairedReceiver ->
-                            Text(r.name, color = Palette.Text, modifier = Modifier.fillMaxWidth().clickable {
+                            Text(r.name, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.fillMaxWidth().clickable {
                                 chooseTvFor = null; pendingCast = pending; rt.connect(r); notice = "Connecting to ${r.name}…"
                             }.padding(vertical = 14.dp))
                         }
@@ -693,7 +693,7 @@ private fun CastSheet(
     val subsSelection = chosenSubs ?: setOfNotNull(subtitles.firstOrNull { MediaSniffer.looksEnglish(it.language, it.label) }?.url)
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Videos on this page", style = MaterialTheme.typography.titleMedium, color = Palette.Text)
+        Text("Videos on this page", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         if (streams.isEmpty()) {
             Text(
                 "Nothing castable was found yet. Common reasons:\n" +
@@ -701,7 +701,7 @@ private fun CastSheet(
                     "• The player uses DRM (Widevine/FairPlay, e.g. Netflix, Disney+): it can't be cast this way.\n" +
                     "• The player only uses blob: URLs and loads the stream in a way that isn't visible; try Scan page.\n" +
                     "• Only ads have played so far.",
-                color = Palette.TextDim, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall,
             )
             OutlinedButton(onClick = onScan) { Text("Scan page") }
             return@Column
@@ -711,24 +711,24 @@ private fun CastSheet(
         }
         val variants = selected?.probe?.variants.orEmpty()
         if (variants.isNotEmpty()) {
-            Text("Quality", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+            Text("Quality", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(selected = variantUri == null, onClick = { variantUri = null }, label = { Text("Auto") })
                 variants.take(4).forEach { v -> FilterChip(selected = variantUri == v.uri, onClick = { variantUri = v.uri }, label = { Text(v.height?.let { "${it}p" } ?: "?") }) }
             }
         }
         if (subtitles.isNotEmpty()) {
-            Text("Subtitles", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+            Text("Subtitles", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
             subtitles.take(8).forEach { s ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = s.url in subsSelection, onCheckedChange = { on -> chosenSubs = if (on) subsSelection + s.url else subsSelection - s.url })
                     Text(listOfNotNull(s.label, s.language?.uppercase()).joinToString(" · ").ifEmpty { s.url.substringAfterLast('/').substringBefore('?').take(40) },
-                        color = Palette.Text, style = MaterialTheme.typography.bodyMedium)
+                        color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
         if (selected?.isProtected == true) {
-            Text("This stream is DRM-protected (Widevine/FairPlay). It can't be cast by any method in this app.", color = Palette.Danger, style = MaterialTheme.typography.bodySmall)
+            Text("This stream is DRM-protected (Widevine/FairPlay). It can't be cast by any method in this app.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
         }
         Row(
             Modifier.fillMaxWidth().clickable { proxyThroughPhone = !proxyThroughPhone }.padding(vertical = 4.dp),
@@ -736,8 +736,8 @@ private fun CastSheet(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Proxy stream through this phone", color = Palette.Text, style = MaterialTheme.typography.bodyMedium)
-                Text("Fixes HTTP 403 / IP-bound tokens by fetching segments on this phone.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                Text("Proxy stream through this phone", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+                Text("Fixes HTTP 403 / IP-bound tokens by fetching segments on this phone.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
             Switch(checked = proxyThroughPhone, onCheckedChange = { proxyThroughPhone = it })
         }
@@ -761,7 +761,7 @@ private fun CastSheet(
 private fun CandidateRow(c: StreamCandidate, selected: Boolean, onSelect: () -> Unit) {
     val p = c.probe
     Surface(
-        color = if (selected) Palette.Accent.copy(alpha = 0.18f) else Palette.SurfaceHigh,
+        color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainerHighest,
         shape = MaterialTheme.shapes.medium,
         modifier = Modifier.fillMaxWidth().clickable(onClick = onSelect),
     ) {
@@ -769,8 +769,8 @@ private fun CandidateRow(c: StreamCandidate, selected: Boolean, onSelect: () -> 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 RadioButton(selected = selected, onClick = onSelect)
                 val label = if (c.kind == MediaKind.HLS && c.hlsRole == HlsRole.MASTER) "HLS (all qualities)" else c.kind.label
-                Chip(label, if (c.kind == MediaKind.HLS || c.kind == MediaKind.DASH) Palette.Accent else Palette.Ok)
-                if (c.isProtected) Chip("DRM", Palette.Danger)
+                Chip(label, if (c.kind == MediaKind.HLS || c.kind == MediaKind.DASH) MaterialTheme.colorScheme.primary else MaterialTheme.status.ok)
+                if (c.isProtected) Chip("DRM", MaterialTheme.colorScheme.error)
             }
             val facts = listOfNotNull(
                 p?.variants?.mapNotNull { it.height }?.maxOrNull()?.let { "up to ${it}p" },
@@ -784,10 +784,10 @@ private fun CandidateRow(c: StreamCandidate, selected: Boolean, onSelect: () -> 
                     else -> null
                 },
             )
-            if (facts.isNotEmpty()) Text(facts.joinToString(" · "), color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
-            p?.problem?.takeIf { p.outcome != ProbeOutcome.FAILED && !c.isProtected }?.let { Text(it, color = Palette.Warn, style = MaterialTheme.typography.bodySmall) }
-            Text(c.host, color = Palette.Text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(c.url, color = Palette.TextDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (facts.isNotEmpty()) Text(facts.joinToString(" · "), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            p?.problem?.takeIf { p.outcome != ProbeOutcome.FAILED && !c.isProtected }?.let { Text(it, color = MaterialTheme.status.warn, style = MaterialTheme.typography.bodySmall) }
+            Text(c.host, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(c.url, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

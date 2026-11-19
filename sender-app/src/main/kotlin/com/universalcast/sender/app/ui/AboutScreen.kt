@@ -49,8 +49,6 @@ fun AboutScreen(
     var tapHint by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
-        modifier = Modifier.appBackground(),
-        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("About UniversalCast") },
@@ -59,11 +57,6 @@ fun AboutScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                    titleContentColor = Palette.Text,
-                    navigationIconContentColor = Palette.Text,
-                ),
             )
         },
     ) { pad ->
@@ -83,10 +76,10 @@ fun AboutScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column {
-                        Text("UniversalCast", style = MaterialTheme.typography.headlineSmall, color = Palette.Text, fontWeight = FontWeight.Bold)
-                        Text("Secure Android TV Casting & Remote", style = MaterialTheme.typography.bodySmall, color = Palette.TextDim)
+                        Text("UniversalCast", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                        Text("Secure Android TV Casting & Remote", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Chip("UCP 1.0", Palette.Accent)
+                    Chip("UCP 1.0", MaterialTheme.colorScheme.primary)
                 }
 
                 Spacer(Modifier.height(4.dp))
@@ -95,8 +88,8 @@ fun AboutScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(14.dp))
-                        .background(Palette.SurfaceHigh)
-                        .border(1.dp, if (devUnlocked || state.isDummyMode) Palette.Ok.copy(alpha = 0.6f) else Palette.Outline, RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                        .border(1.dp, if (devUnlocked || state.isDummyMode) MaterialTheme.status.ok.copy(alpha = 0.6f) else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
                         .clickable {
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             versionTaps++
@@ -120,19 +113,19 @@ fun AboutScreen(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text("Version", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+                            Text("Version", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                             if (devUnlocked || state.isDummyMode) {
-                                Chip("Dev Mode Active", Palette.Ok, live = true)
+                                Chip("Dev Mode Active", MaterialTheme.status.ok, live = true)
                             }
                         }
                         Text(
                             text = "v${updates.currentVersion} (Build ${BuildConfig.VERSION_CODE})",
-                            color = Palette.Text,
+                            color = MaterialTheme.colorScheme.onSurface,
                             style = MaterialTheme.typography.titleMedium,
                             fontFamily = FontFamily.Monospace,
                         )
                         tapHint?.let {
-                            Text(it, color = if (devUnlocked) Palette.Ok else Palette.Warn, style = MaterialTheme.typography.bodySmall)
+                            Text(it, color = if (devUnlocked) MaterialTheme.status.ok else MaterialTheme.status.warn, style = MaterialTheme.typography.bodySmall)
                         }
                     }
                 }
@@ -142,12 +135,12 @@ fun AboutScreen(
             if (devUnlocked || state.isDummyMode) {
                 Panel {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        Text("Developer Dummy TV Simulator", style = MaterialTheme.typography.titleMedium, color = Palette.Ok)
-                        Chip(if (state.isDummyMode) "Connected" else "Standby", if (state.isDummyMode) Palette.Ok else Palette.TextDim, live = state.isDummyMode)
+                        Text("Developer Dummy TV Simulator", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.status.ok)
+                        Chip(if (state.isDummyMode) "Connected" else "Standby", if (state.isDummyMode) MaterialTheme.status.ok else MaterialTheme.colorScheme.onSurfaceVariant, live = state.isDummyMode)
                     }
                     Text(
                         "Simulates a live connected Android TV receiver with sample episodes, multi-language audio tracks, subtitles, and queue so you can test the TV Remote, Touchpad, D-Pad, Keyboard, and Media controls without a TV.",
-                        color = Palette.TextDim,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -162,7 +155,7 @@ fun AboutScreen(
                         }
                         if (state.isDummyMode) {
                             OutlinedButton(onClick = { rt.controller.disconnect() }) {
-                                Text("Disconnect", color = Palette.Danger)
+                                Text("Disconnect", color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
@@ -171,7 +164,7 @@ fun AboutScreen(
 
             // --- Developer Card --------------------------------------------------------------------
             Panel {
-                Text("Developer & Project", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                Text("Developer & Project", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 StatRow("Developer", "Danny (KamiDanji)")
                 StatRow("Repository", "github.com/KamiDanji/UniversalCast-Android")
                 StatRow("Protocol", "UniversalCast Protocol (UCP) 1.0")
@@ -181,7 +174,7 @@ fun AboutScreen(
 
             // --- Live Stats Card -------------------------------------------------------------------
             Panel {
-                Text("Runtime & Security Stats", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                Text("Runtime & Security Stats", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 StatRow(
                     "Connection State",
                     when {
@@ -202,10 +195,10 @@ fun AboutScreen(
                 StatRow("Watch History", "${history.size} tracked stream(s) (${history.count { it.canResume }} resumable)")
                 StatRow("Browser Bookmarks", "${bookmarks.size} saved website(s)")
                 StatRow("Phone Keystore Key", "EC P-256 (Android Hardware Keystore)")
-                Text("Phone Identity Fingerprint", color = Palette.TextDim, style = MaterialTheme.typography.labelSmall)
+                Text("Phone Identity Fingerprint", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
                 Text(
                     Fingerprint.display(rt.identity.senderId),
-                    color = Palette.Text,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontFamily = FontFamily.Monospace,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -219,7 +212,7 @@ fun AboutScreen(
 @Composable
 private fun StatRow(label: String, value: String) {
     Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Text(label, color = Palette.TextDim, style = MaterialTheme.typography.labelSmall)
-        Text(value, color = Palette.Text, style = MaterialTheme.typography.bodyMedium)
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+        Text(value, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
     }
 }

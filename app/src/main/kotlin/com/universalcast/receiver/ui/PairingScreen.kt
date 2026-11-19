@@ -2,8 +2,8 @@ package com.universalcast.receiver.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,50 +35,50 @@ fun PairingScreen(vm: AppViewModel, onClose: () -> Unit) {
     ScreenScaffold("Pair a new device", onBack = onClose) {
         val v = view
         when {
-            failure != null -> Text(failure!!, color = Palette.Danger, style = MaterialTheme.typography.titleLarge)
-            v == null || bootstrap == null -> Text("Preparing…", color = Palette.TextDim, style = MaterialTheme.typography.titleLarge)
-            v.state == PairingState.APPROVED -> ResultPane("Device paired", "${v.senderName ?: "Device"} was approved.", Palette.Ok, onClose)
-            v.state == PairingState.REJECTED -> ResultPane("Pairing rejected", "Nothing was saved.", Palette.Warn, onClose)
-            v.state == PairingState.EXPIRED -> ResultPane("Pairing window expired", "Start again to get a new code.", Palette.Warn, onClose)
-            v.state == PairingState.FAILED -> ResultPane("Pairing failed", v.failureReason ?: "Verification failed. Start again.", Palette.Danger, onClose)
+            failure != null -> Text(failure!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleLarge)
+            v == null || bootstrap == null -> Text("Preparing…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleLarge)
+            v.state == PairingState.APPROVED -> ResultPane("Device paired", "${v.senderName ?: "Device"} was approved.", MaterialTheme.status.ok, onClose)
+            v.state == PairingState.REJECTED -> ResultPane("Pairing rejected", "Nothing was saved.", MaterialTheme.status.warn, onClose)
+            v.state == PairingState.EXPIRED -> ResultPane("Pairing window expired", "Start again to get a new code.", MaterialTheme.status.warn, onClose)
+            v.state == PairingState.FAILED -> ResultPane("Pairing failed", v.failureReason ?: "Verification failed. Start again.", MaterialTheme.colorScheme.error, onClose)
             v.state == PairingState.WAITING_FOR_SENDER -> Row(horizontalArrangement = Arrangement.spacedBy(48.dp), verticalAlignment = Alignment.CenterVertically) {
                 qr?.let { Image(it, "Pairing QR code", Modifier.size(420.dp)) }
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("Scan this code with the sender app", style = MaterialTheme.typography.titleLarge, color = Palette.Text)
-                    Text("Expires in ${formatTime(v.remainingMs)}", style = MaterialTheme.typography.headlineMedium, color = if (v.remainingMs < 20_000) Palette.Warn else Palette.Accent)
-                    Text("${bootstrap!!.addresses.firstOrNull() ?: "no network"}:${bootstrap!!.port}", color = Palette.TextDim, style = MaterialTheme.typography.bodyLarge)
-                    Text("Fingerprint ${Fingerprint.display(bootstrap!!.fingerprint).take(47)}…", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                    Text("Scan this code with the sender app", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Expires in ${formatTime(v.remainingMs)}", style = MaterialTheme.typography.headlineMedium, color = if (v.remainingMs < 20_000) MaterialTheme.status.warn else MaterialTheme.colorScheme.primary)
+                    Text("${bootstrap!!.addresses.firstOrNull() ?: "no network"}:${bootstrap!!.port}", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+                    Text("Fingerprint ${Fingerprint.display(bootstrap!!.fingerprint).take(47)}…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     Spacer(Modifier.height(10.dp))
                     TvButton("Cancel", onClose, primary = false)
                 }
             }
             else -> Row(horizontalArrangement = Arrangement.spacedBy(56.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Verification code", color = Palette.TextDim, style = MaterialTheme.typography.titleMedium)
+                    Text("Verification code", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.titleMedium)
                     val code = v.sas.orEmpty()
                     Text(if (code.length == 6) code.substring(0, 3) + " " + code.substring(3) else code,
-                        fontSize = 88.sp, fontFamily = FontFamily.Monospace, color = Palette.Text, textAlign = TextAlign.Center)
-                    Text("Expires in ${formatTime(v.remainingMs)}", color = if (v.remainingMs < 20_000) Palette.Warn else Palette.TextDim, style = MaterialTheme.typography.bodyLarge)
+                        fontSize = 88.sp, fontFamily = FontFamily.Monospace, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
+                    Text("Expires in ${formatTime(v.remainingMs)}", color = if (v.remainingMs < 20_000) MaterialTheme.status.warn else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text("“${v.senderName ?: "Unknown device"}” wants to pair", style = MaterialTheme.typography.titleLarge, color = Palette.Text)
+                    Text("“${v.senderName ?: "Unknown device"}” wants to pair", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                     if (!v.sasVerifiedByUser) {
-                        Text("Does this code match the one shown on the sender?", color = Palette.TextDim, style = MaterialTheme.typography.bodyLarge)
+                        Text("Does this code match the one shown on the sender?", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            TvButton("Codes match", { vm.sasMatches(true) })
+                            TvButton("Codes match", { vm.sasMatches(true) }, Modifier.autoFocus())
                             TvButton("They differ", { vm.sasMatches(false) }, danger = true)
                         }
                     } else if (v.state != PairingState.READY_FOR_APPROVAL) {
-                        Text("Waiting for the sender to confirm…", color = Palette.TextDim, style = MaterialTheme.typography.bodyLarge)
+                        Text("Waiting for the sender to confirm…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                     } else {
-                        Text("Allow this device to:", color = Palette.TextDim, style = MaterialTheme.typography.bodyLarge)
+                        Text("Allow this device to:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             TvButton("Control playback", { role = Role.CONTROLLER }, primary = role == Role.CONTROLLER)
                             TvButton("Only observe", { role = Role.OBSERVER }, primary = role == Role.OBSERVER)
                         }
-                        Text(if (role == Role.CONTROLLER) "Can start, pause, seek and stop playback." else "Can only see what is playing.", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                        Text(if (role == Role.CONTROLLER) "Can start, pause, seek and stop playback." else "Can only see what is playing.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                            TvButton("Approve", { vm.approve(role) })
+                            TvButton("Approve", { vm.approve(role) }, Modifier.autoFocus())
                             TvButton("Reject", { vm.cancelPairing() }, danger = true)
                         }
                     }
@@ -92,7 +92,7 @@ fun PairingScreen(vm: AppViewModel, onClose: () -> Unit) {
 private fun ResultPane(title: String, text: String, color: androidx.compose.ui.graphics.Color, onClose: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(title, style = MaterialTheme.typography.headlineMedium, color = color)
-        Text(text, style = MaterialTheme.typography.titleMedium, color = Palette.TextDim)
-        TvButton("Done", onClose)
+        Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TvButton("Done", onClose, Modifier.autoFocus())
     }
 }

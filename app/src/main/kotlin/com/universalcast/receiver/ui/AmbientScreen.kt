@@ -5,8 +5,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,13 +74,13 @@ fun AmbientScreen(vm: AppViewModel, onDismiss: () -> Unit) {
         ) {
             Chip(
                 text = if (running) "Ready to cast · TLS :${rt.core.boundPort}" else "Starting…",
-                color = if (running) Palette.Ok else Palette.Warn,
+                color = if (running) MaterialTheme.status.ok else MaterialTheme.status.warn,
                 live = running,
             )
             if (connected.isNotEmpty()) {
                 Chip(
                     text = "${connected.size} phone${if (connected.size == 1) "" else "s"} connected",
-                    color = Palette.Accent,
+                    color = MaterialTheme.colorScheme.primary,
                     live = true,
                 )
             }
@@ -93,7 +93,7 @@ fun AmbientScreen(vm: AppViewModel, onDismiss: () -> Unit) {
         ) {
             Text(
                 text = timeStr,
-                color = Palette.Text,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 112.sp,
                 fontWeight = FontWeight.Light,
                 letterSpacing = 2.sp,
@@ -101,7 +101,7 @@ fun AmbientScreen(vm: AppViewModel, onDismiss: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text(
                 text = dateStr,
-                color = Palette.TextDim,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.headlineSmall,
             )
         }
@@ -111,22 +111,22 @@ fun AmbientScreen(vm: AppViewModel, onDismiss: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .background(Color(0x66121A2B), RoundedCornerShape(20.dp))
-                .border(1.dp, Palette.Outline, RoundedCornerShape(20.dp))
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
+                .border(1.dp, MaterialTheme.colorScheme.border, RoundedCornerShape(20.dp))
                 .padding(horizontal = 24.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column {
-                Text(name, color = Palette.Text, style = MaterialTheme.typography.titleLarge)
+                Text(name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                 Text(
                     if (connected.isEmpty()) "Open UniversalCast on your phone to cast videos, websites or local files"
                     else "Connected: " + connected.joinToString { "${it.name} (${it.role.name.lowercase()})" },
-                    color = Palette.TextDim,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            Text("Press any key for menu", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+            Text("Press any key for menu", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
