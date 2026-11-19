@@ -123,6 +123,15 @@ enum class RemoteKey {
     }
 }
 
+/** Video aspect-ratio / scaling mode on the TV player. */
+enum class VideoScaleMode {
+    FIT, ZOOM, FILL;
+
+    companion object {
+        fun fromWire(s: String): VideoScaleMode? = values().firstOrNull { it.name.equals(s.trim(), ignoreCase = true) }
+    }
+}
+
 /**
  * Immutable view of the player. [revision] increases with every published change, [capturedAtMs] lets a
  * sender extrapolate [positionMs] while [isPlaying]. [durationMs] is null while unknown (e.g. live streams).
@@ -147,6 +156,9 @@ data class PlaybackSnapshot(
     val subtitleStyle: SubtitleStyle = SubtitleStyle(),
     val queue: List<QueueItemSummary> = emptyList(),
     val queueIndex: Int = -1,
+    val videoScale: VideoScaleMode = VideoScaleMode.FIT,
+    val sleepTimerRemainingMs: Long? = null,
+    val mediaKind: String? = null,
 ) {
     fun toJson(): JsonObject = linkedMapOf(
         "status" to status.name,
@@ -168,6 +180,9 @@ data class PlaybackSnapshot(
         "subtitleStyle" to subtitleStyle.toJson(),
         "queue" to queue.map { it.toJson() },
         "queueIndex" to queueIndex.toLong(),
+        "videoScale" to videoScale.name,
+        "sleepTimerRemainingMs" to sleepTimerRemainingMs,
+        "mediaKind" to mediaKind,
     )
 
     companion object {
@@ -192,6 +207,7 @@ data class PlaybackSnapshot(
             val audioTracks = parseObjList(f.raw["audioTracks"], 32).map { MediaTrack.fromJson(it) }
             val subtitleTracks = parseObjList(f.raw["subtitleTracks"], 32).map { MediaTrack.fromJson(it) }
             val queue = parseObjList(f.raw["queue"], 100).map { QueueItemSummary.fromJson(it) }
+            val scale = f.optString("videoScale", 16)?.let { VideoScaleMode.fromWire(it) } ?: VideoScaleMode.FIT
             return PlaybackSnapshot(
                 status = status,
                 mediaUri = f.optString("mediaUri", 2048),
@@ -212,6 +228,9 @@ data class PlaybackSnapshot(
                 subtitleStyle = f.optObj("subtitleStyle")?.let { SubtitleStyle.fromJson(it) } ?: SubtitleStyle(),
                 queue = queue,
                 queueIndex = (f.optLong("queueIndex", -1, 1000) ?: -1L).toInt(),
+                videoScale = scale,
+                sleepTimerRemainingMs = f.optLong("sleepTimerRemainingMs", 0, Long.MAX_VALUE),
+                mediaKind = f.optString("mediaKind", 32, 0),
             )
         }
     }
@@ -239,6 +258,8 @@ interface PlaybackEngine {
     fun selectTracks(audioTrackId: String?, subtitleTrackId: String?) {}
     fun setSubtitleOffset(offsetMs: Long) {}
     fun setSubtitleStyle(style: SubtitleStyle) {}
+    fun setVideoScale(scale: VideoScaleMode) {}
+    fun setSleepTimer(durationMs: Long) {}
     fun enqueue(item: MediaItemInfo, playNext: Boolean = false, startPositionMs: Long = 0) {
         load(item, autoplay = true, startPositionMs = startPositionMs)
     }
@@ -249,6 +270,7 @@ interface PlaybackEngine {
     fun skipPrevious(): Boolean = false
     fun jumpToQueueItem(id: String): Boolean = false
     fun onRemoteKey(key: RemoteKey) {}
+    fun onRemoteText(text: String, submit: Boolean = false) {}
     fun addListener(listener: PlaybackListener)
     fun removeListener(listener: PlaybackListener)
     fun release()

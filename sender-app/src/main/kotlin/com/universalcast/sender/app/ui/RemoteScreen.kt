@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.universalcast.playback.PlaybackStatus
 import com.universalcast.playback.RemoteKey
+import com.universalcast.playback.VideoScaleMode
 import com.universalcast.sender.ConnectionPhase
 import com.universalcast.sender.FailureKind
 import com.universalcast.sender.MediaCast
@@ -54,9 +55,12 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
     var showSubtitleStyle by remember { mutableStateOf(false) }
     var enqueueNextLocalFile by remember { mutableStateOf(false) }
 
-    val localFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            rt.castLocalUri(uri, enqueue = enqueueNextLocalFile)
+    val localFileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) {
+            uris.forEachIndexed { idx, uri ->
+                val asQueue = enqueueNextLocalFile || idx > 0
+                rt.castLocalUri(uri, enqueue = asQueue)
+            }
         }
     }
 
@@ -151,6 +155,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                         canControl = st.canControl,
                         activeMedia = snap.status != PlaybackStatus.IDLE,
                         onKey = { rt.controller.remoteKey(it) },
+                        onSendText = { text, submit -> rt.controller.remoteText(text, submit) },
                         onScrubDeltaMs = { delta ->
                             val target = (st.estimatedPositionMs(System.currentTimeMillis()) + delta).coerceAtLeast(0L)
                             rt.controller.seek(target)
@@ -171,6 +176,9 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                             Chip(snap.status.name.lowercase().replaceFirstChar { it.uppercase() }, statusColor(snap.status))
                             if (snap.queue.size > 1 && snap.queueIndex >= 0) {
                                 Chip("Queue ${snap.queueIndex + 1}/${snap.queue.size}", Palette.Accent)
+                            }
+                            snap.sleepTimerRemainingMs?.let { rem ->
+                                Chip("Sleep ${(rem / 60_000L).coerceAtLeast(1L)}m", Palette.Warn)
                             }
                         }
                         snap.error?.let { err ->
@@ -252,6 +260,37 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                             onValueChangeFinished = { vol?.let { v -> c.setVolume(v.toDouble()) }; vol = null },
                             enabled = st.canControl && snap.status != PlaybackStatus.IDLE,
                         )
+
+                        Text("Aspect ratio / zoom", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            for ((label, mode) in listOf("Fit" to VideoScaleMode.FIT, "Zoom (Crop)" to VideoScaleMode.ZOOM, "Stretch 16:9" to VideoScaleMode.FILL)) {
+                                FilterChip(
+                                    selected = snap.videoScale == mode,
+                                    onClick = { c.setVideoScale(mode) },
+                                    enabled = st.canControl,
+                                    label = { Text(label) },
+                                )
+                            }
+                        }
+
+                        Text("Sleep timer", color = Palette.TextDim, style = MaterialTheme.typography.labelMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                            val activeSleepMin = snap.sleepTimerRemainingMs?.let { (it / 60_000L).toInt() }
+                            FilterChip(
+                                selected = activeSleepMin == null,
+                                onClick = { c.setSleepTimer(0L) },
+                                enabled = st.canControl,
+                                label = { Text("Off") },
+                            )
+                            for (mins in listOf(15, 30, 45, 60, 90)) {
+                                FilterChip(
+                                    selected = activeSleepMin != null && activeSleepMin in (mins - 7)..(mins + 7),
+                                    onClick = { c.setSleepTimer(mins * 60_000L) },
+                                    enabled = st.canControl,
+                                    label = { Text("${mins}m") },
+                                )
+                            }
+                        }
                     }
 
                     // --- live audio & subtitle tracks + delay + style --------------------------------------
@@ -396,24 +435,24 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                     // --- cast from a website or local phone file -------------------------------------------
                     Panel {
                         Text("Cast from a website or phone storage", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
-                        Text("Find streams on any website with the built-in ad-blocking browser, or pick a local video/audio file from your phone.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                        Text("Find streams on any website with the built-in ad-blocking browser, or pick local videos, music or photos from your phone.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
                         Button(onClick = onBrowse, enabled = st.canControl, modifier = Modifier.fillMaxWidth()) { Text("Find a video on a website") }
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             FilledTonalButton(
                                 onClick = {
                                     enqueueNextLocalFile = false
-                                    localFileLauncher.launch(arrayOf("video/*", "audio/*"))
+                                    localFileLauncher.launch(arrayOf("video/*", "audio/*", "image/*"))
                                 },
                                 enabled = st.canControl,
                                 modifier = Modifier.weight(1f),
-                            ) { Text("Cast Local File") }
+                            ) { Text("Cast Videos / Music / Photos") }
                             OutlinedButton(
                                 onClick = {
                                     enqueueNextLocalFile = true
-                                    localFileLauncher.launch(arrayOf("video/*", "audio/*"))
+                                    localFileLauncher.launch(arrayOf("video/*", "audio/*", "image/*"))
                                 },
                                 enabled = st.canControl,
-                            ) { Text("+ Queue File") }
+                            ) { Text("+ Queue") }
                         }
                     }
 
@@ -544,9 +583,12 @@ private fun TvTouchpadAndDpadPanel(
     canControl: Boolean,
     activeMedia: Boolean,
     onKey: (RemoteKey) -> Unit,
+    onSendText: (String, Boolean) -> Unit,
     onScrubDeltaMs: (Long) -> Unit,
 ) {
     var useTouchpad by remember { mutableStateOf(true) }
+    var showKeyboard by remember { mutableStateOf(false) }
+    var textDraft by remember { mutableStateOf("") }
     var lastGestureLabel by remember { mutableStateOf("Swipe to navigate · Tap for OK · Long-press for Back") }
     val haptics = LocalHapticFeedback.current
 
@@ -563,6 +605,34 @@ private fun TvTouchpadAndDpadPanel(
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FilterChip(selected = useTouchpad, onClick = { useTouchpad = true }, label = { Text("Touchpad") })
                 FilterChip(selected = !useTouchpad, onClick = { useTouchpad = false }, label = { Text("D-Pad") })
+                FilterChip(selected = showKeyboard, onClick = { showKeyboard = !showKeyboard }, label = { Text("⌨") })
+            }
+        }
+
+        if (showKeyboard) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = textDraft,
+                    onValueChange = { textDraft = it.take(500) },
+                    label = { Text("Type text to send to TV") },
+                    singleLine = true,
+                    enabled = canControl,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = {
+                        if (textDraft.isNotEmpty()) {
+                            onSendText(textDraft, true)
+                            lastGestureLabel = "Sent: ${textDraft.take(20)}"
+                            textDraft = ""
+                        }
+                    },
+                    enabled = canControl && textDraft.isNotEmpty(),
+                ) { Text("Send") }
             }
         }
 

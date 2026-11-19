@@ -48,6 +48,18 @@ class PlayerOsdTracker {
             val sign = if (sec > 0) "+" else ""
             return "Subtitle delay: %s%.1fs".format(java.util.Locale.US, sign, sec)
         }
+        if (next.videoScale != p.videoScale) {
+            val label = when (next.videoScale) {
+                com.universalcast.playback.VideoScaleMode.FIT -> "Fit"
+                com.universalcast.playback.VideoScaleMode.ZOOM -> "Zoom / Crop"
+                com.universalcast.playback.VideoScaleMode.FILL -> "Stretch 16:9"
+            }
+            return "Aspect ratio: $label"
+        }
+        if ((p.sleepTimerRemainingMs == null) != (next.sleepTimerRemainingMs == null)) {
+            val rem = next.sleepTimerRemainingMs
+            return if (rem == null) "Sleep timer: Off" else "Sleep timer: ${(rem / 60_000L).coerceAtLeast(1L)} min"
+        }
         if (p.status == PlaybackStatus.PLAYING && next.status == PlaybackStatus.PAUSED) {
             return "Paused"
         }

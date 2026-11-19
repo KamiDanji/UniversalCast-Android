@@ -22,6 +22,7 @@ import com.universalcast.playback.PlaybackStatus
 import com.universalcast.playback.RemoteKey
 import com.universalcast.playback.SubtitleStyle
 import com.universalcast.playback.SubtitleValidator
+import com.universalcast.playback.VideoScaleMode
 import com.universalcast.security.Bytes
 import com.universalcast.security.Fingerprint
 import com.universalcast.security.ReceiverIdentity
@@ -473,6 +474,15 @@ class UcpProtocolHandler(
                 val bottomPad = (f.optDouble("bottomPaddingFraction", 0.0, 0.35) ?: 0.08).toFloat()
                 engine.setSubtitleStyle(SubtitleStyle(fontScale, bgOpacity, bottomPad))
             }
+            Method.PLAYBACK_SET_VIDEO_SCALE -> {
+                val scale = VideoScaleMode.fromWire(f.string("scale", 16))
+                    ?: throw UcpException(ErrorCode.INVALID_PAYLOAD, "Unknown video scale mode")
+                engine.setVideoScale(scale)
+            }
+            Method.PLAYBACK_SET_SLEEP_TIMER -> {
+                val durationMs = f.long("durationMs", 0, 24L * 3600 * 1000)
+                engine.setSleepTimer(durationMs)
+            }
             Method.QUEUE_ADD -> {
                 val (item, _, start) = parseMediaPayload(f)
                 val playNext = f.optBool("playNext") ?: false
@@ -500,6 +510,14 @@ class UcpProtocolHandler(
                 val key = RemoteKey.fromWire(f.string("key", 32))
                     ?: throw UcpException(ErrorCode.INVALID_PAYLOAD, "Unknown remote key")
                 engine.onRemoteKey(key)
+            }
+            Method.REMOTE_TEXT -> {
+                val text = f.string("text", 1024, 1)
+                if (text.any { it.code < 0x20 && it != '\n' && it != '\t' }) {
+                    throw UcpException(ErrorCode.INVALID_PAYLOAD, "Text contains control characters")
+                }
+                val submit = f.optBool("submit") ?: false
+                engine.onRemoteText(text, submit)
             }
             else -> {
                 if (engine.snapshot.status == PlaybackStatus.IDLE) {

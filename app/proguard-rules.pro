@@ -4,3 +4,4 @@
 -dontwarn org.slf4j.**
 -dontwarn javax.naming.**
 -keep class com.universalcast.** { *; }
+-keep interface androidx.media3.exoplayer.Renderer { *; }

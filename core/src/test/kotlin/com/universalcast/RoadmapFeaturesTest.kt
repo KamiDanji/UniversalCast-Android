@@ -7,6 +7,7 @@ import com.universalcast.playback.PlaybackStatus
 import com.universalcast.playback.RemoteKey
 import com.universalcast.playback.SubtitleInfo
 import com.universalcast.playback.SubtitleStyle
+import com.universalcast.playback.VideoScaleMode
 import com.universalcast.security.SoftwareSenderIdentity
 import com.universalcast.sender.BookmarkStore
 import com.universalcast.sender.ByteArrayMediaSource
@@ -236,24 +237,35 @@ class RoadmapFeaturesTest {
             val customStyle = SubtitleStyle(fontScale = 1.5f, backgroundOpacity = 0.8f, bottomPaddingFraction = 0.12f)
             ctl.setSubtitleStyle(customStyle)
             waitFor { kotlin.math.abs(ctl.state.snapshot.subtitleStyle.fontScale - 1.5f) < 0.01f }
+
+            // Video aspect-ratio scale and Sleep Timer
+            ctl.setVideoScale(VideoScaleMode.ZOOM)
+            waitFor { ctl.state.snapshot.videoScale == VideoScaleMode.ZOOM }
+            ctl.setSleepTimer(30 * 60_000L)
+            waitFor { ctl.state.snapshot.sleepTimerRemainingMs == 30 * 60_000L }
+            ctl.setSleepTimer(0L)
+            waitFor { ctl.state.snapshot.sleepTimerRemainingMs == null }
         } finally {
             ctl.shutdown()
         }
     }
 
-    // ---- 4. Google TV Remote Key Input -------------------------------------------------------------------
+    // ---- 4. Google TV Remote Key & Keyboard Text Input ---------------------------------------------------
 
-    @Test fun remoteKeysReachReceiverAndAreDeniedToObservers() = withEnv { env ->
+    @Test fun remoteKeysAndTextReachReceiverAndAreDeniedToObservers() = withEnv { env ->
         val (_, ctl) = pairController(env)
         val (_, observer) = env.pairedLogin(Role.OBSERVER)
         try {
             ctl.remoteKey(RemoteKey.UP)
             ctl.remoteKey(RemoteKey.CENTER)
             ctl.remoteKey(RemoteKey.VOLUME_UP)
-            waitFor { env.engine.calls.containsAll(listOf("key:UP", "key:CENTER", "key:VOLUME_UP")) }
+            ctl.remoteText("One Piece", submit = true)
+            waitFor { env.engine.calls.containsAll(listOf("key:UP", "key:CENTER", "key:VOLUME_UP", "text:One Piece:true")) }
 
             val resp = observer.request(Method.REMOTE_KEY, mapOf("key" to "HOME"), session = "forged")
             assertEquals(ErrorCode.FORBIDDEN, resp.error?.code)
+            val textResp = observer.request(Method.REMOTE_TEXT, mapOf("text" to "hi"), session = "forged")
+            assertEquals(ErrorCode.FORBIDDEN, textResp.error?.code)
         } finally {
             ctl.shutdown()
         }

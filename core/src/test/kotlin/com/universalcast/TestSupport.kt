@@ -19,6 +19,7 @@ import com.universalcast.playback.PlaybackStatus
 import com.universalcast.playback.RemoteKey
 import com.universalcast.playback.SubtitleStyle
 import com.universalcast.playback.TrackKind
+import com.universalcast.playback.VideoScaleMode
 import com.universalcast.security.EcKeys
 import com.universalcast.security.KeyBackedReceiverIdentity
 import com.universalcast.security.SenderIdentity
@@ -203,6 +204,16 @@ class FakePlaybackEngine : PlaybackEngine {
         update { it.copy(subtitleStyle = style) }
     }
 
+    override fun setVideoScale(scale: VideoScaleMode) {
+        calls.add("videoScale:${scale.name}")
+        update { it.copy(videoScale = scale) }
+    }
+
+    override fun setSleepTimer(durationMs: Long) {
+        calls.add("sleepTimer:$durationMs")
+        update { it.copy(sleepTimerRemainingMs = durationMs.takeIf { d -> d > 0 }) }
+    }
+
     override fun enqueue(item: MediaItemInfo, playNext: Boolean, startPositionMs: Long) {
         calls.add("enqueue:${item.uri}:$playNext:$startPositionMs")
         val immediate = queue.add(item, playNext, startPositionMs, snap.status == PlaybackStatus.IDLE)
@@ -264,6 +275,10 @@ class FakePlaybackEngine : PlaybackEngine {
 
     override fun onRemoteKey(key: RemoteKey) {
         calls.add("key:${key.name}")
+    }
+
+    override fun onRemoteText(text: String, submit: Boolean) {
+        calls.add("text:$text:$submit")
     }
 
     override fun addListener(listener: PlaybackListener) {

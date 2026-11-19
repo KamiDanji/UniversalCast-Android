@@ -35,10 +35,11 @@ object Permissions {
         Method.PLAYBACK_SET_SPEED -> Permission.SET_SPEED
         Method.PLAYBACK_SET_VOLUME -> Permission.SET_VOLUME
         Method.PLAYBACK_SELECT_TRACKS -> Permission.SELECT_TRACKS
-        Method.PLAYBACK_SET_SUBTITLE_OFFSET, Method.PLAYBACK_SET_SUBTITLE_STYLE -> Permission.SET_SUBTITLE_PREFS
+        Method.PLAYBACK_SET_SUBTITLE_OFFSET, Method.PLAYBACK_SET_SUBTITLE_STYLE,
+        Method.PLAYBACK_SET_VIDEO_SCALE, Method.PLAYBACK_SET_SLEEP_TIMER -> Permission.SET_SUBTITLE_PREFS
         Method.QUEUE_ADD, Method.QUEUE_REMOVE, Method.QUEUE_REORDER, Method.QUEUE_CLEAR,
         Method.QUEUE_NEXT, Method.QUEUE_PREVIOUS, Method.QUEUE_JUMP -> Permission.MANAGE_QUEUE
-        Method.REMOTE_KEY -> Permission.REMOTE_INPUT
+        Method.REMOTE_KEY, Method.REMOTE_TEXT -> Permission.REMOTE_INPUT
         else -> null
     }
 }

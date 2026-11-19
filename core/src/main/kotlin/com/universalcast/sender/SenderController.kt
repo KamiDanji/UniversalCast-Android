@@ -7,6 +7,7 @@ import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
 import com.universalcast.playback.RemoteKey
 import com.universalcast.playback.SubtitleStyle
+import com.universalcast.playback.VideoScaleMode
 import com.universalcast.security.SenderIdentity
 import com.universalcast.ucp.Envelope
 import com.universalcast.ucp.ErrorCode
@@ -209,8 +210,20 @@ class SenderController(
     fun setSubtitleStyle(style: SubtitleStyle) =
         control(Method.PLAYBACK_SET_SUBTITLE_STYLE, style.toJson())
 
+    fun setVideoScale(scale: VideoScaleMode) =
+        control(Method.PLAYBACK_SET_VIDEO_SCALE, mapOf("scale" to scale.name))
+
+    fun setSleepTimer(durationMs: Long) =
+        control(Method.PLAYBACK_SET_SLEEP_TIMER, mapOf("durationMs" to durationMs.coerceIn(0L, 24L * 3600 * 1000)))
+
     fun remoteKey(key: RemoteKey) =
         control(Method.REMOTE_KEY, mapOf("key" to key.name))
+
+    fun remoteText(text: String, submit: Boolean = false) {
+        val clean = text.filter { it.code >= 0x20 || it == '\n' || it == '\t' }.take(1024)
+        if (clean.isEmpty()) return
+        control(Method.REMOTE_TEXT, mapOf("text" to clean, "submit" to submit))
+    }
 
     fun refresh() = submit { client?.let { refreshSnapshot(it) } }
 

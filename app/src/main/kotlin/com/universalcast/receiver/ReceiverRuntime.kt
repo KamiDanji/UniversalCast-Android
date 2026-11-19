@@ -115,6 +115,7 @@ class ReceiverRuntime(private val app: Context) {
         engine.applyInitialSubtitleStyle(settings.subtitleStyle.value)
         engine.onSubtitleStyleChanged = { style -> settings.setSubtitleStyle(style) }
         engine.onRemoteKeyReceived = { key -> remoteDispatcher.dispatch(key) }
+        engine.onRemoteTextReceived = { text, submit -> remoteDispatcher.dispatchText(text, submit) }
         remoteDispatcher.onKeyAction = { _, label -> if (label != null) showOsd(label) }
         engine.addListener { snap ->
             _playback.value = snap

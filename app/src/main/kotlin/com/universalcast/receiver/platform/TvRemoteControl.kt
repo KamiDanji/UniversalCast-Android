@@ -2,12 +2,15 @@ package com.universalcast.receiver.platform
 
 import android.accessibilityservice.AccessibilityService
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
+import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import com.universalcast.playback.PlaybackStatus
@@ -42,6 +45,27 @@ class TvRemoteDispatcher(
         if (activeActivityRef?.get() === activity) {
             activeActivityRef = null
         }
+    }
+
+    fun dispatchText(text: String, submit: Boolean) {
+        runCatching {
+            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            cm?.setPrimaryClip(ClipData.newPlainText("UniversalCast", text))
+        }
+        val act = activeActivityRef?.get()
+        if (act != null) {
+            runCatching {
+                val decor = act.window?.decorView
+                if (decor != null) {
+                    val events = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(text.toCharArray())
+                    events?.forEach { ev -> decor.dispatchKeyEvent(ev) }
+                    if (submit) {
+                        sendKeyEventToActivity(act, KeyEvent.KEYCODE_ENTER)
+                    }
+                }
+            }
+        }
+        onKeyAction?.invoke(RemoteKey.CENTER, "⌨ ${text.take(28)}")
     }
 
     fun dispatch(key: RemoteKey) {

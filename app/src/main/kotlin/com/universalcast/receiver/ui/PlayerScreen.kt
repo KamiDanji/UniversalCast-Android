@@ -5,29 +5,43 @@ import android.graphics.Typeface
 import android.view.KeyEvent
 import android.view.ViewGroup
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.SubtitleView
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
 import com.universalcast.playback.SubtitleStyle
+import com.universalcast.playback.VideoScaleMode
 import com.universalcast.receiver.platform.Media3PlaybackEngine
 import kotlinx.coroutines.delay
 
@@ -72,26 +86,52 @@ fun PlayerScreen(
     }
 
     val subStyle = snapshot.subtitleStyle
+    val resizeMode = when (snapshot.videoScale) {
+        VideoScaleMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        VideoScaleMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        VideoScaleMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+    }
+    val photo by engine.currentPhoto.collectAsState()
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    useController = false          // no on-screen transport UI at all
-                    isFocusable = false
-                    isFocusableInTouchMode = false
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER) // our own spinner below
-                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                    player = engine.player
-                    subtitleView?.let { applySubtitleStyle(it, subStyle) }
-                }
-            },
-            update = { pv ->
-                pv.player = engine.player
-                pv.subtitleView?.let { applySubtitleStyle(it, subStyle) }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+        if (snapshot.mediaKind == "IMAGE" && photo != null) {
+            val scale = when (snapshot.videoScale) {
+                VideoScaleMode.ZOOM -> ContentScale.Crop
+                VideoScaleMode.FILL -> ContentScale.FillBounds
+                VideoScaleMode.FIT -> ContentScale.Fit
+            }
+            Image(
+                bitmap = photo!!.asImageBitmap(),
+                contentDescription = snapshot.title,
+                contentScale = scale,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        useController = false          // no on-screen transport UI at all
+                        isFocusable = false
+                        isFocusableInTouchMode = false
+                        setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER) // our own spinner below
+                        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                        player = engine.player
+                        this.resizeMode = resizeMode
+                        subtitleView?.let { applySubtitleStyle(it, subStyle) }
+                    }
+                },
+                update = { pv ->
+                    pv.player = engine.player
+                    pv.resizeMode = resizeMode
+                    pv.subtitleView?.let { applySubtitleStyle(it, subStyle) }
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        if (snapshot.mediaKind == "AUDIO" && snapshot.error == null) {
+            AudioVisualizerOverlay(snapshot = snapshot, modifier = Modifier.align(Alignment.Center))
+        }
 
         val busy = snapshot.error == null &&
             (snapshot.status == PlaybackStatus.LOADING || snapshot.status == PlaybackStatus.BUFFERING)
@@ -134,6 +174,68 @@ fun PlayerScreen(
                 Text(e.message, color = Palette.Text, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
                 Text("Try again from your phone, or press Back to leave.", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
             }
+        }
+    }
+}
+
+@Composable
+private fun AudioVisualizerOverlay(snapshot: PlaybackSnapshot, modifier: Modifier = Modifier) {
+    val inf = rememberInfiniteTransition(label = "eq")
+    val bars = listOf(520, 380, 640, 440, 580, 350, 490).mapIndexed { i, dur ->
+        inf.animateFloat(
+            initialValue = 0.2f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(tween(dur, delayMillis = i * 70, easing = LinearEasing), RepeatMode.Reverse),
+            label = "bar$i",
+        )
+    }
+    Column(
+        modifier = modifier
+            .widthIn(min = 420.dp, max = 640.dp)
+            .background(Color(0xD9121A28), RoundedCornerShape(28.dp))
+            .border(1.dp, Palette.Outline, RoundedCornerShape(28.dp))
+            .padding(36.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(18.dp),
+    ) {
+        Row(
+            modifier = Modifier.height(64.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            bars.forEach { anim ->
+                val frac = if (snapshot.isPlaying) anim.value else 0.18f
+                Box(
+                    Modifier
+                        .width(12.dp)
+                        .fillMaxHeight(frac)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Palette.Accent)
+                )
+            }
+        }
+        Text(
+            text = snapshot.title ?: snapshot.mediaUri ?: "Audio Stream",
+            color = Palette.Text,
+            style = MaterialTheme.typography.headlineMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+        val dur = snapshot.durationMs
+        if (dur != null && dur > 0) {
+            val progress = (snapshot.positionMs.toFloat() / dur.toFloat()).coerceIn(0f, 1f)
+            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(formatTime(snapshot.positionMs), color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                Text(formatTime(dur), color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+            }
+        } else {
+            Text(formatTime(snapshot.positionMs), color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+        }
+        if (snapshot.queue.size > 1 && snapshot.queueIndex + 1 in snapshot.queue.indices) {
+            val nextTitle = snapshot.queue[snapshot.queueIndex + 1].title ?: snapshot.queue[snapshot.queueIndex + 1].uri
+            Text("Up next: $nextTitle", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

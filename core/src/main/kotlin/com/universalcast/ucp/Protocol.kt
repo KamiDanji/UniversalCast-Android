@@ -76,6 +76,8 @@ object Method {
     const val PLAYBACK_SELECT_TRACKS = "playback.selectTracks"
     const val PLAYBACK_SET_SUBTITLE_OFFSET = "playback.setSubtitleOffset"
     const val PLAYBACK_SET_SUBTITLE_STYLE = "playback.setSubtitleStyle"
+    const val PLAYBACK_SET_VIDEO_SCALE = "playback.setVideoScale"
+    const val PLAYBACK_SET_SLEEP_TIMER = "playback.setSleepTimer"
     const val QUEUE_ADD = "queue.add"
     const val QUEUE_REMOVE = "queue.remove"
     const val QUEUE_REORDER = "queue.reorder"
@@ -84,6 +86,7 @@ object Method {
     const val QUEUE_PREVIOUS = "queue.previous"
     const val QUEUE_JUMP = "queue.jump"
     const val REMOTE_KEY = "remote.key"
+    const val REMOTE_TEXT = "remote.text"
 }
 
 object EventName {
