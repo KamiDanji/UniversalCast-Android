@@ -1,5 +1,6 @@
 package com.universalcast.sender
 
+import com.universalcast.network.HotspotPeerFinder
 import com.universalcast.playback.MediaHeaders
 import com.universalcast.playback.MediaItemInfo
 import com.universalcast.playback.MediaTrack
@@ -347,7 +348,11 @@ class SenderController(
             )
         }
         var pinProblem = false
-        for (host in (preferredHosts + r.addresses).distinct().take(4)) {
+        val primaryCandidates = (preferredHosts + r.addresses).distinct().take(4)
+        val hotspotExtra = if (primaryCandidates.none { it == "127.0.0.1" }) {
+            HotspotPeerFinder.findCandidates(r.port, r.addresses)
+        } else emptyList()
+        for (host in (primaryCandidates + hotspotExtra).distinct().take(6)) {
             if (!wantConnected) return
             val c = UcpClient(identity, host, r.port, r.fingerprint)
             try {

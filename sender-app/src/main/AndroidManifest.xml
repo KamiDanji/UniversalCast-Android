@@ -48,10 +48,23 @@
             </intent-filter>
         </activity>
 
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
         <service
             android:name=".ConnectionService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+
+        <service
+            android:name=".AutoMediaBrowserService"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
 
         <!-- The scanner library locks this to landscape; allow any orientation. -->
         <activity

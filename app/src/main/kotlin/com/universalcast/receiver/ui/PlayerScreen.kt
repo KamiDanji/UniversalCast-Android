@@ -16,11 +16,16 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -92,8 +97,28 @@ fun PlayerScreen(
         VideoScaleMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
     }
     val photo by engine.currentPhoto.collectAsState()
+    var touchOverlayAtMs by remember { mutableLongStateOf(0L) }
+    var showTouchControls by remember { mutableStateOf(false) }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    LaunchedEffect(touchOverlayAtMs) {
+        if (touchOverlayAtMs > 0L) {
+            showTouchControls = true
+            delay(3_800L)
+            showTouchControls = false
+        }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+            ) {
+                touchOverlayAtMs = if (showTouchControls) 0L.also { showTouchControls = false } else System.currentTimeMillis()
+            }
+    ) {
         if (snapshot.mediaKind == "IMAGE" && photo != null) {
             val scale = when (snapshot.videoScale) {
                 VideoScaleMode.ZOOM -> ContentScale.Crop
@@ -160,6 +185,50 @@ fun PlayerScreen(
                     color = Palette.Text,
                     style = MaterialTheme.typography.titleMedium,
                 )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showTouchControls,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(24.dp),
+        ) {
+            Row(
+                Modifier
+                    .background(Color(0xD90E1523), RoundedCornerShape(22.dp))
+                    .border(1.dp, Palette.Outline, RoundedCornerShape(22.dp))
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(onClick = { engine.stop() }) {
+                    Text("← Stop", color = Palette.Danger)
+                }
+                if (snapshot.queue.size > 1) {
+                    FilledTonalButton(
+                        onClick = { engine.skipPrevious(); touchOverlayAtMs = System.currentTimeMillis() },
+                        enabled = snapshot.queueIndex > 0,
+                    ) { Text("⏮") }
+                }
+                FilledTonalButton(onClick = { engine.seekTo((snapshot.positionMs - 10_000L).coerceAtLeast(0L)); touchOverlayAtMs = System.currentTimeMillis() }) {
+                    Text("−10 s")
+                }
+                Button(onClick = {
+                    if (snapshot.isPlaying) engine.pause() else engine.play()
+                    touchOverlayAtMs = System.currentTimeMillis()
+                }) {
+                    Text(if (snapshot.isPlaying) "Pause" else "Play")
+                }
+                FilledTonalButton(onClick = { engine.seekTo(snapshot.positionMs + 10_000L); touchOverlayAtMs = System.currentTimeMillis() }) {
+                    Text("+10 s")
+                }
+                if (snapshot.queue.size > 1) {
+                    FilledTonalButton(
+                        onClick = { engine.skipNext(); touchOverlayAtMs = System.currentTimeMillis() },
+                        enabled = snapshot.queueIndex + 1 < snapshot.queue.size,
+                    ) { Text("⏭") }
+                }
             }
         }
 
@@ -279,6 +348,15 @@ fun handlePlayerKey(event: KeyEvent, snapshot: PlaybackSnapshot, engine: Media3P
             }
         }
         return true
+    }
+    if (ALLOW_REMOTE_MEDIA_KEYS && event.action == KeyEvent.ACTION_UP) {
+        when (code) {
+            KeyEvent.KEYCODE_MEDIA_STOP -> { runCatching { engine.stop() }; return true }
+            KeyEvent.KEYCODE_MEDIA_NEXT -> { runCatching { if (!engine.skipNext()) engine.seekTo(snapshot.positionMs + 10_000L) }; return true }
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { runCatching { if (!engine.skipPrevious()) engine.seekTo((snapshot.positionMs - 10_000L).coerceAtLeast(0L)) }; return true }
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { runCatching { engine.seekTo(snapshot.positionMs + 10_000L) }; return true }
+            KeyEvent.KEYCODE_MEDIA_REWIND -> { runCatching { engine.seekTo((snapshot.positionMs - 10_000L).coerceAtLeast(0L)) }; return true }
+        }
     }
     return true // D-pad, OK/center, numbers, …: do nothing
 }
