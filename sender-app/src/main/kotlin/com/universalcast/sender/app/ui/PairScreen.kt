@@ -45,7 +45,6 @@ fun PairScreen(vm: AppViewModel, onClose: () -> Unit, onOpenRemote: () -> Unit =
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = heroBarColors(),
                 title = { Text("Pair a TV") },
                 navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
             )

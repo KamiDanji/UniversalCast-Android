@@ -46,9 +46,6 @@ class ThemePrefs private constructor(ctx: Context) {
     )
     val mode: StateFlow<ThemeMode> = _mode
     val color: StateFlow<ColorTheme> = _color
-    private val _vibrant = MutableStateFlow(prefs.getBoolean("vibrant", true))
-    val vibrant: StateFlow<Boolean> = _vibrant
-    fun setVibrant(v: Boolean) { _vibrant.value = v; prefs.edit().putBoolean("vibrant", v).apply() }
 
     fun setMode(m: ThemeMode) { _mode.value = m; prefs.edit().putString("mode", m.name).apply() }
     fun setColor(c: ColorTheme) { _color.value = c; prefs.edit().putString("color", c.name).apply() }
@@ -78,19 +75,12 @@ val MaterialTheme.status: StatusColors @Composable @ReadOnlyComposable get() = L
  * Builds a full Material 3 [ColorScheme] from a seed hue using the standard M3 tone assignments
  * (primary T40/T80, containers T90/T30, neutral surfaces T98/T6 …). Tones are CIE L*, so contrast matches the spec.
  */
-fun schemeFromSeed(hue: Float, dark: Boolean, vibrant: Boolean = true): ColorScheme {
-    // Vibrant = richer primary/secondary/tertiary and noticeably tinted surfaces; light tones are capped so they never turn neon.
-    fun ch(base: Float, tone: Int) = if (tone >= 70) base * 0.8f else base
-    val cp = if (vibrant) 48f else 36f
-    val cs = if (vibrant) 22f else 14f
-    val ct = if (vibrant) 32f else 24f
-    val cn = if (vibrant) 5f else 3f
-    val cnv = if (vibrant) 10f else 6f
-    fun p(tone: Int) = lch(tone.toFloat(), ch(cp, tone), hue)
-    fun s(tone: Int) = lch(tone.toFloat(), ch(cs, tone), hue)
-    fun t(tone: Int) = lch(tone.toFloat(), ch(ct, tone), (hue + 60f) % 360f)
-    fun n(tone: Int) = lch(tone.toFloat(), cn, hue)
-    fun nv(tone: Int) = lch(tone.toFloat(), cnv, hue)
+fun schemeFromSeed(hue: Float, dark: Boolean): ColorScheme {
+    fun p(tone: Int) = lch(tone.toFloat(), 40f, hue)
+    fun s(tone: Int) = lch(tone.toFloat(), 16f, hue)
+    fun t(tone: Int) = lch(tone.toFloat(), 26f, (hue + 60f) % 360f)
+    fun n(tone: Int) = lch(tone.toFloat(), 3.5f, hue)
+    fun nv(tone: Int) = lch(tone.toFloat(), 7f, hue)
     val err = if (dark) Color(0xFFFFB4AB) else Color(0xFFBA1A1A)
     val onErr = if (dark) Color(0xFF690005) else Color.White
     val errC = if (dark) Color(0xFF93000A) else Color(0xFFFFDAD6)
@@ -154,7 +144,6 @@ fun SenderTheme(content: @Composable () -> Unit) {
     val prefs = remember { ThemePrefs.get(ctx) }
     val mode by prefs.mode.collectAsState()
     val colorTheme by prefs.color.collectAsState()
-    val vibrant by prefs.vibrant.collectAsState()
     val dark = when (mode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
@@ -163,7 +152,7 @@ fun SenderTheme(content: @Composable () -> Unit) {
     val scheme = when {
         colorTheme == ColorTheme.DYNAMIC && Build.VERSION.SDK_INT >= 31 ->
             if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
-        else -> remember(colorTheme, dark, vibrant) { schemeFromSeed((colorTheme.hue ?: ColorTheme.OCEAN.hue!!), dark, vibrant) }
+        else -> remember(colorTheme, dark) { schemeFromSeed((colorTheme.hue ?: ColorTheme.OCEAN.hue!!), dark) }
     }
 
     // Edge-to-edge with system-bar icons that follow the chosen (not the system) mode.
@@ -187,57 +176,16 @@ fun SenderTheme(content: @Composable () -> Unit) {
 @Composable
 fun Modifier.appBackground(): Modifier = this.background(MaterialTheme.colorScheme.surface)
 
-enum class Tone { NEUTRAL, PRIMARY, SECONDARY, TERTIARY }
-
-/**
- * A Material 3 card used for every content group. Coloured tones use the matching container colour and re-map
- * onSurface/onSurfaceVariant inside, so existing text keeps good contrast on the tinted card.
- */
+/** A Material 3 filled card used for every content group. */
 @Composable
-fun Panel(modifier: Modifier = Modifier, tone: Tone = Tone.NEUTRAL, content: @Composable ColumnScope.() -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    val (container, on) = when (tone) {
-        Tone.NEUTRAL -> cs.surfaceContainerHigh to cs.onSurface
-        Tone.PRIMARY -> cs.primaryContainer to cs.onPrimaryContainer
-        Tone.SECONDARY -> cs.secondaryContainer to cs.onSecondaryContainer
-        Tone.TERTIARY -> cs.tertiaryContainer to cs.onTertiaryContainer
-    }
-    val inner = if (tone == Tone.NEUTRAL) cs else cs.copy(onSurface = on, onSurfaceVariant = on.copy(alpha = 0.78f), outlineVariant = on.copy(alpha = 0.25f))
+fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier.fillMaxWidth().reveal().animateContentSize(),
-        colors = CardDefaults.cardColors(containerColor = container, contentColor = on),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         shape = MaterialTheme.shapes.large,
     ) {
-        MaterialTheme(colorScheme = inner) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
-        }
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
-}
-
-/** Icon in a tinted rounded square (primary / secondary / tertiary container). */
-@Composable
-fun IconBadge(icon: androidx.compose.ui.graphics.vector.ImageVector, tone: Tone = Tone.PRIMARY, modifier: Modifier = Modifier) {
-    val cs = MaterialTheme.colorScheme
-    val (bg, fg) = when (tone) {
-        Tone.SECONDARY -> cs.secondaryContainer to cs.onSecondaryContainer
-        Tone.TERTIARY -> cs.tertiaryContainer to cs.onTertiaryContainer
-        else -> cs.primaryContainer to cs.onPrimaryContainer
-    }
-    Surface(modifier.size(48.dp), shape = MaterialTheme.shapes.medium, color = bg) {
-        Box(contentAlignment = Alignment.Center) { Icon(icon, null, tint = fg, modifier = Modifier.size(26.dp)) }
-    }
-}
-
-/** Tinted header-bar colours shared by every screen. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun heroBarColors(): TopAppBarColors {
-    val cs = MaterialTheme.colorScheme
-    return TopAppBarDefaults.topAppBarColors(
-        containerColor = cs.primaryContainer, scrolledContainerColor = cs.primaryContainer,
-        titleContentColor = cs.onPrimaryContainer, navigationIconContentColor = cs.onPrimaryContainer,
-        actionIconContentColor = cs.onPrimaryContainer,
-    )
 }
 
 /** Small tonal status label (optionally with a pulsing dot for something live). */

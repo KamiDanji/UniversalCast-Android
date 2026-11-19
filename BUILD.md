@@ -45,12 +45,12 @@ keyPassword=...
 Both apps check GitHub's latest release on start (at most once an hour) and offer to download and install it.
 Debug builds never update (different applicationId).
 
-1. Bump `uc.versionName` (e.g. `1.1.1`) and `uc.versionCode` (+1, e.g. `13`) in `gradle.properties`. Both apps share them.
-2. `./gradlew assembleRelease` with `keystore.properties` in place (current version: `1.1.1`, `versionCode=13`).
+1. Bump `uc.versionName` (e.g. `1.1.0`) and `uc.versionCode` (+1, e.g. `12`) in `gradle.properties`. Both apps share them.
+2. `./gradlew assembleRelease` with `keystore.properties` in place (current version: `1.1.0`, `versionCode=12`).
 3. Create a GitHub release tagged `v<versionName>` (e.g. `v1.0.10`, not a draft or pre-release) and attach the two APKs,
    renamed so the names start with:
-   - `universalcast-receiver` (from `app/build/outputs/apk/release/app-release.apk`), e.g. `universalcast-receiver-1.1.1.apk`
-   - `universalcast-sender` (from `sender-app/build/outputs/apk/release/sender-app-release.apk`), e.g. `universalcast-sender-1.1.1.apk`
+   - `universalcast-receiver` (from `app/build/outputs/apk/release/app-release.apk`), e.g. `universalcast-receiver-1.1.0.apk`
+   - `universalcast-sender` (from `sender-app/build/outputs/apk/release/sender-app-release.apk`), e.g. `universalcast-sender-1.1.0.apk`
    (Optional: keep copies locally under the git-untracked `release/` folder.)
 4. The GitHub release notes become the "what's new" text in the update dialog, rendered with Markdown formatting (`MarkdownParser`).
 

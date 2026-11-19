@@ -75,7 +75,6 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = heroBarColors(),
                 title = { Text(st.receiver?.name ?: "Remote", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } },
                 actions = {
@@ -167,7 +166,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                     )
                 } else {
                     // --- now playing -----------------------------------------------------------------------
-                    Panel(tone = Tone.PRIMARY) {
+                    Panel {
                         val active = snap.status != PlaybackStatus.IDLE
                         Text(
                             if (active) (snap.title ?: snap.mediaUri.orEmpty()) else "Nothing playing",
@@ -303,7 +302,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
 
                     // --- live audio & subtitle tracks + delay + style --------------------------------------
                     if (snap.status != PlaybackStatus.IDLE || showSubtitleStyle) {
-                        Panel(tone = Tone.SECONDARY) {
+                        Panel {
                             val c = rt.controller
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Audio & Subtitles", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
@@ -441,7 +440,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                     }
 
                     // --- cast from a website or local phone file -------------------------------------------
-                    Panel(tone = Tone.TERTIARY) {
+                    Panel {
                         Text("Cast from a website or phone storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                         Text("Find streams on any website with the built-in ad-blocking browser, or pick local videos, music or photos from your phone.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         Button(onClick = onBrowse, enabled = st.canControl, modifier = Modifier.fillMaxWidth()) { Text("Find a video on a website") }
@@ -491,7 +490,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
 
                     // --- continue watching / recent history ------------------------------------------------
                     if (history.isNotEmpty()) {
-                        Panel(tone = Tone.SECONDARY) {
+                        Panel {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                                 Text("Continue Watching & History", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                                 TextButton(onClick = { rt.clearHistory() }) { Text("Clear", color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -637,8 +636,8 @@ private fun TvTouchpadAndDpadPanel(
                     .fillMaxWidth()
                     .height(250.dp)
                     .clip(RoundedCornerShape(24.dp))
-                    .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.tertiaryContainer)))
-                    .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
                     .pointerInput(canControl) {
                         if (!canControl) return@pointerInput
                         detectTapGestures(

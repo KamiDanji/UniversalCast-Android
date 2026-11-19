@@ -43,10 +43,6 @@ fun HomeScreen(
             LargeTopAppBar(
                 title = { Text("UniversalCast") },
                 scrollBehavior = scroll,
-                colors = TopAppBarDefaults.largeTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer, scrolledContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer, actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                ),
                 actions = {
                     IconButton(onClick = { appearance = true }) { Icon(Icons.Filled.Palette, "Appearance") }
                     var appMenu by remember { mutableStateOf(false) }
@@ -111,7 +107,7 @@ fun HomeScreen(
                     val connected = state.phase == ConnectionPhase.CONNECTED
                     ElevatedCard(
                         onClick = onOpenRemote,
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                     ) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                             PulseDot(if (connected) MaterialTheme.status.ok else MaterialTheme.status.warn, 12.dp)
@@ -122,11 +118,11 @@ fun HomeScreen(
                                     else "Reconnecting to ${state.receiver?.name}…",
                                     style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 )
-                                Text("Tap to open the remote", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                                Text("Tap to open the remote", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
                             }
                             if (state.isDummyMode) {
                                 TextButton(onClick = { rt.controller.disconnect() }) { Text("Exit", color = MaterialTheme.colorScheme.error) }
-                            } else Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                            } else Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
                         }
                     }
                 }
@@ -135,7 +131,7 @@ fun HomeScreen(
             item { SectionLabel("Your TVs") }
             if (receivers.isEmpty()) {
                 item {
-                    Panel(tone = Tone.PRIMARY) {
+                    Panel {
                         Text("No TV paired yet", style = MaterialTheme.typography.titleMedium)
                         Text(
                             "Open UniversalCast on your TV and choose “Pair a new device”, then scan the QR code it shows.",
@@ -156,7 +152,7 @@ fun HomeScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {
                     Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconBadge(Icons.Filled.Tv, Tone.PRIMARY)
+                        Icon(Icons.Filled.Tv, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                         Column(Modifier.weight(1f).padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(r.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -184,15 +180,15 @@ fun HomeScreen(
             item {
                 Card(
                     onClick = onBrowse,
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        IconBadge(Icons.Filled.TravelExplore, Tone.TERTIARY)
+                        Icon(Icons.Filled.TravelExplore, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
                         Column(Modifier.weight(1f)) {
                             Text("Cast from a website", style = MaterialTheme.typography.titleSmall)
-                            Text("Play a video in the browser, cast what it plays.", color = MaterialTheme.colorScheme.onSecondaryContainer, style = MaterialTheme.typography.bodySmall)
+                            Text("Play a video in the browser, cast what it plays.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                         }
-                        Icon(Icons.Filled.ChevronRight, null)
+                        Icon(Icons.Filled.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -204,7 +200,7 @@ fun HomeScreen(
                     // Tapping goes straight to the scanner.
                     Card(onClick = onPair, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                            IconBadge(Icons.Filled.Tv, Tone.SECONDARY)
+                            PulseDot(MaterialTheme.status.ok, 10.dp)
                             Column(Modifier.weight(1f)) {
                                 Text(t.serviceName, style = MaterialTheme.typography.titleSmall)
                                 Text("Not paired yet · tap to pair by scanning its QR code", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
