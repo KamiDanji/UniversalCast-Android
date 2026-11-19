@@ -19,6 +19,8 @@ import com.universalcast.playback.PlaybackEngine
 import com.universalcast.playback.PlaybackListener
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
+import com.universalcast.playback.RemoteKey
+import com.universalcast.playback.SubtitleStyle
 import com.universalcast.playback.SubtitleValidator
 import com.universalcast.security.Bytes
 import com.universalcast.security.Fingerprint
@@ -170,11 +172,11 @@ class UcpProtocolHandler(
         rec.phase = Phase.CLOSED
         authenticator.forgetConnection(conn.id)
         pairing.onConnectionClosed(conn.id)
-        sessions.endForConnection(conn.id, SessionEndReason.CONNECTION_CLOSED)
+        sessions.detachOrEndForConnection(conn.id, timeouts.sessionGraceMs)
         if (wasAuthenticated) notifyConnections()
     }
 
-    /** Closes connections that did not finish authentication or pairing in time. Call about once per second. */
+    /** Closes connections that did not finish authentication or pairing in time, and expires stale detached sessions. Call about once per second. */
     fun sweep() {
         val now = time.nowMs()
         for (rec in records.values) {
@@ -184,11 +186,13 @@ class UcpProtocolHandler(
                 closeRecord(rec, Ucp.CLOSE_AUTH_TIMEOUT, "authentication timeout")
             }
         }
+        sessions.sweepDetached(timeouts.sessionGraceMs)
     }
 
-    /** Persists the revocation, then immediately drops every live connection of that sender. */
+    /** Persists the revocation, then immediately drops every live connection and any detached session of that sender. */
     fun revokeSender(senderId: String): Boolean {
         val known = registry.revoke(senderId, time.nowMs())
+        sessions.endForSender(senderId, SessionEndReason.REVOKED)
         for (rec in records.values) {
             if (rec.senderId == senderId) {
                 sessions.endForConnection(rec.conn.id, SessionEndReason.REVOKED)
@@ -409,7 +413,7 @@ class UcpProtocolHandler(
             Method.PLAYBACK_SNAPSHOT -> linkedMapOf("snapshot" to engine.snapshot.toJson())
             Method.SESSION_CREATE -> {
                 val r = sessions.create(rec.conn.id, sender.senderId)
-                linkedMapOf("sessionId" to r.session.id, "replacedPrevious" to (r.replaced != null))
+                linkedMapOf("sessionId" to r.session.id, "replacedPrevious" to (r.replaced != null), "resumed" to r.resumed)
             }
             Method.SESSION_TERMINATE -> {
                 val s = sessions.validate(env.session, rec.conn.id)
@@ -423,41 +427,80 @@ class UcpProtocolHandler(
         }
     }
 
+    private fun parseMediaPayload(f: Fields): Triple<MediaItemInfo, Boolean, Long> {
+        val uri = try {
+            MediaUriValidator.validateUri(f.string("uri"))
+        } catch (e: IllegalArgumentException) {
+            throw UcpException(ErrorCode.UNSUPPORTED_MEDIA, e.message ?: "Unsupported media URI")
+        }
+        val mime = f.optString("mimeType", 128)?.let {
+            try {
+                MediaUriValidator.validateMime(it)
+            } catch (e: IllegalArgumentException) {
+                throw UcpException(ErrorCode.INVALID_PAYLOAD, "Invalid mimeType")
+            }
+        }
+        val title = f.optString("title", 256)
+        val autoplay = f.optBool("autoplay") ?: true
+        val start = f.optLong("startPositionMs", 0, 7L * 24 * 3600 * 1000) ?: 0L
+        val headers = f.optObj("headers")?.let {
+            try {
+                MediaHeaders.validate(it.raw)
+            } catch (e: IllegalArgumentException) {
+                throw UcpException(ErrorCode.INVALID_PAYLOAD, e.message ?: "Invalid headers")
+            }
+        } ?: emptyMap()
+        val subtitles = f.raw["subtitles"]?.let {
+            try {
+                SubtitleValidator.validate(it)
+            } catch (e: IllegalArgumentException) {
+                throw UcpException(ErrorCode.INVALID_PAYLOAD, e.message ?: "Invalid subtitles")
+            }
+        } ?: emptyList()
+        return Triple(MediaItemInfo(uri, mime, title, headers, subtitles), autoplay, start)
+    }
+
     private fun control(method: String, f: Fields): JsonObject {
         when (method) {
             Method.MEDIA_LOAD -> {
-                val uri = try {
-                    MediaUriValidator.validateUri(f.string("uri"))
-                } catch (e: IllegalArgumentException) {
-                    throw UcpException(ErrorCode.UNSUPPORTED_MEDIA, e.message ?: "Unsupported media URI")
-                }
-                val mime = f.optString("mimeType", 128)?.let {
-                    try {
-                        MediaUriValidator.validateMime(it)
-                    } catch (e: IllegalArgumentException) {
-                        throw UcpException(ErrorCode.INVALID_PAYLOAD, "Invalid mimeType")
-                    }
-                }
-                val title = f.optString("title", 256)
-                val autoplay = f.optBool("autoplay") ?: true
-                val start = f.optLong("startPositionMs", 0, 7L * 24 * 3600 * 1000) ?: 0L
-                val headers = f.optObj("headers")?.let {
-                    try {
-                        MediaHeaders.validate(it.raw)
-                    } catch (e: IllegalArgumentException) {
-                        throw UcpException(ErrorCode.INVALID_PAYLOAD, e.message ?: "Invalid headers")
-                    }
-                } ?: emptyMap()
-                val subtitles = f.raw["subtitles"]?.let {
-                    try {
-                        SubtitleValidator.validate(it)
-                    } catch (e: IllegalArgumentException) {
-                        throw UcpException(ErrorCode.INVALID_PAYLOAD, e.message ?: "Invalid subtitles")
-                    }
-                } ?: emptyList()
-                engine.load(MediaItemInfo(uri, mime, title, headers, subtitles), autoplay, start)
+                val (item, autoplay, start) = parseMediaPayload(f)
+                engine.load(item, autoplay, start)
             }
             Method.PLAYBACK_STOP -> engine.stop()
+            Method.PLAYBACK_SET_SUBTITLE_STYLE -> {
+                val fontScale = f.double("fontScale", 0.5, 2.5).toFloat()
+                val bgOpacity = (f.optDouble("backgroundOpacity", 0.0, 1.0) ?: 0.6).toFloat()
+                val bottomPad = (f.optDouble("bottomPaddingFraction", 0.0, 0.35) ?: 0.08).toFloat()
+                engine.setSubtitleStyle(SubtitleStyle(fontScale, bgOpacity, bottomPad))
+            }
+            Method.QUEUE_ADD -> {
+                val (item, _, start) = parseMediaPayload(f)
+                val playNext = f.optBool("playNext") ?: false
+                try {
+                    engine.enqueue(item, playNext, start)
+                } catch (e: IllegalArgumentException) {
+                    throw UcpException(ErrorCode.INVALID_PAYLOAD, e.message ?: "Could not enqueue item")
+                }
+            }
+            Method.QUEUE_REMOVE -> engine.removeQueueItem(f.string("itemId", 64))
+            Method.QUEUE_REORDER -> engine.moveQueueItem(f.string("itemId", 64), f.long("toIndex", 0, 1000).toInt())
+            Method.QUEUE_CLEAR -> engine.clearQueue()
+            Method.QUEUE_NEXT -> {
+                if (!engine.skipNext()) throw UcpException(ErrorCode.INVALID_STATE, "No next item in queue")
+            }
+            Method.QUEUE_PREVIOUS -> {
+                if (!engine.skipPrevious()) throw UcpException(ErrorCode.INVALID_STATE, "No previous item in queue")
+            }
+            Method.QUEUE_JUMP -> {
+                if (!engine.jumpToQueueItem(f.string("itemId", 64))) {
+                    throw UcpException(ErrorCode.INVALID_PAYLOAD, "Unknown queue item")
+                }
+            }
+            Method.REMOTE_KEY -> {
+                val key = RemoteKey.fromWire(f.string("key", 32))
+                    ?: throw UcpException(ErrorCode.INVALID_PAYLOAD, "Unknown remote key")
+                engine.onRemoteKey(key)
+            }
             else -> {
                 if (engine.snapshot.status == PlaybackStatus.IDLE) {
                     throw UcpException(ErrorCode.INVALID_STATE, "No media is loaded")
@@ -469,6 +512,17 @@ class UcpProtocolHandler(
                     Method.PLAYBACK_SEEK -> engine.seekTo(f.long("positionMs", 0, Long.MAX_VALUE / 4))
                     Method.PLAYBACK_SET_SPEED -> engine.setSpeed(f.double("speed", 0.25, 4.0).toFloat())
                     Method.PLAYBACK_SET_VOLUME -> engine.setVolume(f.double("volume", 0.0, 1.0).toFloat())
+                    Method.PLAYBACK_SELECT_TRACKS -> {
+                        val audioId = f.optString("audioTrackId", 64)
+                        val subId = f.optString("subtitleTrackId", 64)
+                        if (audioId == null && subId == null) {
+                            throw UcpException(ErrorCode.INVALID_PAYLOAD, "At least one of audioTrackId or subtitleTrackId is required")
+                        }
+                        engine.selectTracks(audioId, subId)
+                    }
+                    Method.PLAYBACK_SET_SUBTITLE_OFFSET -> {
+                        engine.setSubtitleOffset(f.long("offsetMs", -60_000, 60_000))
+                    }
                     else -> throw UcpException(ErrorCode.UNKNOWN_METHOD, "Unknown method '$method'")
                 }
             }
@@ -484,7 +538,11 @@ class UcpProtocolHandler(
         "role" to role.name,
         "permissions" to role.permissions.map { it.name }.sorted(),
         "maxMessageBytes" to Ucp.MAX_MESSAGE_BYTES,
-        "features" to listOf("session", "snapshot", "events", "seek", "speed", "volume", "media-headers", "subtitles"),
+        "features" to listOf(
+            "session", "snapshot", "events", "seek", "speed", "volume",
+            "media-headers", "subtitles", "tracks", "subtitle-style",
+            "queue", "remote-input", "detached-playback"
+        ),
         // Browser casting still uses direct URLs: the TV fetches the stream itself (with the headers above).
         "playbackMethods" to listOf("direct-url"),
         "media" to linkedMapOf(

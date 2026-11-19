@@ -310,10 +310,42 @@ class HandlerTest {
         assertEquals(ErrorCode.SESSION_INVALID, p.call(Method.PLAYBACK_PLAY).code())
     }
 
-    @Test fun connectionLossReleasesSessionAndScreen() {
+    @Test fun connectionLossDetachesSessionDuringGracePeriodAndExpiresAfterwards() {
         val p = paired().startSession()
         p.call(Method.MEDIA_LOAD, mapOf("uri" to "https://h/a.mp4"))
         handler.onClose(p.conn)
+        // During the grace period, the session is detached and playback continues undisturbed.
+        assertTrue(sessions.active()!!.isDetached)
+        assertFalse(engine.calls.contains("stop"))
+        time.advance(Ucp.SESSION_GRACE_MS - 1); handler.sweep()
+        assertNotNull(sessions.active())
+        assertFalse(engine.calls.contains("stop"))
+        // Once the grace period elapses, sweep() ends the detached session and releases the screen.
+        time.advance(1); handler.sweep()
+        assertNull(sessions.active())
+        assertTrue(engine.calls.contains("stop"))
+    }
+
+    @Test fun detachedSessionCanBeResumedBySameControllerOrStoppedByRevocation() {
+        val p = paired().startSession()
+        p.call(Method.MEDIA_LOAD, mapOf("uri" to "https://h/a.mp4"))
+        handler.onClose(p.conn)
+        assertTrue(sessions.active()!!.isDetached)
+        assertFalse(engine.calls.contains("stop"))
+
+        // Reconnecting with the same sender identity resumes control without interrupting playback.
+        val reconnected = Peer(p.sender).login()
+        val created = reconnected.call(Method.SESSION_CREATE)
+        assertEquals(true, created.ok)
+        assertEquals(true, created.payload["resumed"])
+        reconnected.session = Fields(created.payload).string("sessionId")
+        assertFalse(engine.calls.contains("stop"))
+        assertEquals(true, reconnected.call(Method.PLAYBACK_PAUSE).ok)
+
+        // If the connection drops again and the sender is revoked while detached, playback stops immediately.
+        handler.onClose(reconnected.conn)
+        assertTrue(sessions.active()!!.isDetached)
+        assertTrue(handler.revokeSender(p.sender!!.senderId))
         assertNull(sessions.active())
         assertTrue(engine.calls.contains("stop"))
     }

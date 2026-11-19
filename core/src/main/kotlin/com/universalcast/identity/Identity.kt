@@ -8,7 +8,8 @@ import com.universalcast.ucp.Method
 import com.universalcast.ucp.StrictJson
 
 enum class Permission {
-    PING, READ_SNAPSHOT, CREATE_SESSION, END_SESSION, LOAD_MEDIA, PLAY, PAUSE, RESUME, SEEK, STOP, SET_SPEED, SET_VOLUME
+    PING, READ_SNAPSHOT, CREATE_SESSION, END_SESSION, LOAD_MEDIA, PLAY, PAUSE, RESUME, SEEK, STOP, SET_SPEED, SET_VOLUME,
+    SELECT_TRACKS, SET_SUBTITLE_PREFS, MANAGE_QUEUE, REMOTE_INPUT
 }
 
 enum class Role(val permissions: Set<Permission>) {
@@ -33,6 +34,11 @@ object Permissions {
         Method.PLAYBACK_SEEK -> Permission.SEEK
         Method.PLAYBACK_SET_SPEED -> Permission.SET_SPEED
         Method.PLAYBACK_SET_VOLUME -> Permission.SET_VOLUME
+        Method.PLAYBACK_SELECT_TRACKS -> Permission.SELECT_TRACKS
+        Method.PLAYBACK_SET_SUBTITLE_OFFSET, Method.PLAYBACK_SET_SUBTITLE_STYLE -> Permission.SET_SUBTITLE_PREFS
+        Method.QUEUE_ADD, Method.QUEUE_REMOVE, Method.QUEUE_REORDER, Method.QUEUE_CLEAR,
+        Method.QUEUE_NEXT, Method.QUEUE_PREVIOUS, Method.QUEUE_JUMP -> Permission.MANAGE_QUEUE
+        Method.REMOTE_KEY -> Permission.REMOTE_INPUT
         else -> null
     }
 }

@@ -5,6 +5,8 @@ import com.universalcast.playback.MediaUriValidator
 import com.universalcast.playback.SubtitleValidator
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
+import com.universalcast.playback.RemoteKey
+import com.universalcast.playback.SubtitleStyle
 import com.universalcast.security.SenderIdentity
 import com.universalcast.ucp.Envelope
 import com.universalcast.ucp.ErrorCode
@@ -126,8 +128,37 @@ class SenderController(
     }
 
     /** Casts [url] (the "Cast a link" field and shared links). */
-    fun load(url: String, title: String? = null, autoplay: Boolean = true) =
-        load(MediaCast(url, title = title, autoplay = autoplay))
+    fun load(url: String, title: String? = null, autoplay: Boolean = true, startPositionMs: Long = 0) =
+        load(MediaCast(url, title = title, autoplay = autoplay, startPositionMs = startPositionMs))
+
+    private fun buildMediaPayload(cast: MediaCast): LinkedHashMap<String, Any?>? {
+        val clean = try {
+            MediaUriValidator.validateUri(cast.uri.trim())
+        } catch (e: RuntimeException) { // UcpException or IllegalArgumentException for malformed input
+            note("Enter a valid http:// or https:// link.")
+            return null
+        }
+        val headers = try {
+            MediaHeaders.validate(cast.headers)
+        } catch (e: IllegalArgumentException) {
+            note("This stream needs request headers the TV doesn't accept.")
+            return null
+        }
+        val subtitles = cast.subtitles.map { BrowserCast.toWire(it) }
+        try {
+            SubtitleValidator.validate(subtitles)
+        } catch (e: IllegalArgumentException) {
+            note("The selected subtitles can't be sent to the TV.")
+            return null
+        }
+        val payload = linkedMapOf<String, Any?>("uri" to clean, "autoplay" to cast.autoplay)
+        if (!cast.title.isNullOrBlank()) payload["title"] = cast.title.trim().take(200)
+        if (cast.mimeType != null) payload["mimeType"] = cast.mimeType
+        if (cast.startPositionMs > 0) payload["startPositionMs"] = cast.startPositionMs
+        if (headers.isNotEmpty()) payload["headers"] = LinkedHashMap<String, Any?>(headers)
+        if (subtitles.isNotEmpty()) payload["subtitles"] = subtitles
+        return payload
+    }
 
     /**
      * Casts [cast]: optional [MediaCast.mimeType] tells the TV the format when the URL doesn't (HLS without ".m3u8"),
@@ -135,32 +166,26 @@ class SenderController(
      * Anything the receiver would reject is refused here first, with a user-facing message.
      */
     fun load(cast: MediaCast) {
-        val clean = try {
-            MediaUriValidator.validateUri(cast.uri.trim())
-        } catch (e: RuntimeException) { // UcpException or IllegalArgumentException for malformed input
-            note("Enter a valid http:// or https:// link.")
-            return
-        }
-        val headers = try {
-            MediaHeaders.validate(cast.headers)
-        } catch (e: IllegalArgumentException) {
-            note("This stream needs request headers the TV doesn't accept.")
-            return
-        }
-        val subtitles = cast.subtitles.map { BrowserCast.toWire(it) }
-        try {
-            SubtitleValidator.validate(subtitles)
-        } catch (e: IllegalArgumentException) {
-            note("The selected subtitles can't be sent to the TV.")
-            return
-        }
-        val payload = linkedMapOf<String, Any?>("uri" to clean, "autoplay" to cast.autoplay)
-        if (!cast.title.isNullOrBlank()) payload["title"] = cast.title.trim().take(200)
-        if (cast.mimeType != null) payload["mimeType"] = cast.mimeType
-        if (headers.isNotEmpty()) payload["headers"] = LinkedHashMap<String, Any?>(headers)
-        if (subtitles.isNotEmpty()) payload["subtitles"] = subtitles
+        val payload = buildMediaPayload(cast) ?: return
         control(Method.MEDIA_LOAD, payload)
     }
+
+    /** Adds [cast] to the receiver's playback queue (starts playing immediately if the TV is idle). */
+    fun enqueue(cast: MediaCast, playNext: Boolean = false) {
+        val payload = buildMediaPayload(cast) ?: return
+        if (playNext) payload["playNext"] = true
+        control(Method.QUEUE_ADD, payload)
+    }
+
+    fun enqueue(url: String, title: String? = null, playNext: Boolean = false) =
+        enqueue(MediaCast(url, title = title), playNext = playNext)
+
+    fun queueRemove(itemId: String) = control(Method.QUEUE_REMOVE, mapOf("itemId" to itemId))
+    fun queueReorder(itemId: String, toIndex: Int) = control(Method.QUEUE_REORDER, mapOf("itemId" to itemId, "toIndex" to toIndex.toLong()))
+    fun queueClear() = control(Method.QUEUE_CLEAR)
+    fun queueNext() = control(Method.QUEUE_NEXT)
+    fun queuePrevious() = control(Method.QUEUE_PREVIOUS)
+    fun queueJump(itemId: String) = control(Method.QUEUE_JUMP, mapOf("itemId" to itemId))
 
     fun play() = control(Method.PLAYBACK_PLAY)
     fun pause() = control(Method.PLAYBACK_PAUSE)
@@ -169,6 +194,23 @@ class SenderController(
     fun seek(positionMs: Long) = control(Method.PLAYBACK_SEEK, mapOf("positionMs" to positionMs.coerceAtLeast(0)))
     fun setSpeed(speed: Double) = control(Method.PLAYBACK_SET_SPEED, mapOf("speed" to speed.coerceIn(0.25, 4.0)))
     fun setVolume(volume: Double) = control(Method.PLAYBACK_SET_VOLUME, mapOf("volume" to volume.coerceIn(0.0, 1.0)))
+
+    fun selectTracks(audioTrackId: String? = null, subtitleTrackId: String? = null) {
+        val payload = linkedMapOf<String, Any?>()
+        if (audioTrackId != null) payload["audioTrackId"] = audioTrackId
+        if (subtitleTrackId != null) payload["subtitleTrackId"] = subtitleTrackId
+        if (payload.isEmpty()) return
+        control(Method.PLAYBACK_SELECT_TRACKS, payload)
+    }
+
+    fun setSubtitleOffset(offsetMs: Long) =
+        control(Method.PLAYBACK_SET_SUBTITLE_OFFSET, mapOf("offsetMs" to offsetMs.coerceIn(-60_000L, 60_000L)))
+
+    fun setSubtitleStyle(style: SubtitleStyle) =
+        control(Method.PLAYBACK_SET_SUBTITLE_STYLE, style.toJson())
+
+    fun remoteKey(key: RemoteKey) =
+        control(Method.REMOTE_KEY, mapOf("key" to key.name))
 
     fun refresh() = submit { client?.let { refreshSnapshot(it) } }
 

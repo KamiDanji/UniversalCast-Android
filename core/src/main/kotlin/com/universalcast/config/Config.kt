@@ -38,4 +38,5 @@ data class ReceiverTimeouts(
     val authTimeoutMs: Long = Ucp.AUTH_TIMEOUT_MS,
     val challengeTtlMs: Long = Ucp.CHALLENGE_TTL_MS,
     val pairingWindowMs: Long = Ucp.PAIRING_WINDOW_MS,
+    val sessionGraceMs: Long = Ucp.SESSION_GRACE_MS,
 )

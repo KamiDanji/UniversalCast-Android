@@ -21,13 +21,14 @@ import com.universalcast.playback.PlaybackStatus
 import com.universalcast.receiver.UniversalCastApp
 import com.universalcast.receiver.service.ReceiverService
 
-private enum class Screen { HOME, PAIRING, DEVICES, SETTINGS }
+private enum class Screen { HOME, PAIRING, DEVICES, SETTINGS, AMBIENT }
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
 
     /** True while this activity was brought to the front by a cast and has not been left since. */
     private var openedByCast by mutableStateOf(false)
+    private var lastInteractionTick by mutableLongStateOf(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,10 +46,21 @@ class MainActivity : ComponentActivity() {
             UniversalCastTheme {
                 var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
                 val playback by vm.runtime.playback.collectAsState()
+                val showOsd by vm.runtime.settings.showPlayerOsd.collectAsState()
+                val autoAmbient by vm.runtime.settings.autoAmbient.collectAsState()
+                val osdToast by vm.runtime.osdToast.collectAsState()
                 val playing = playback.status != PlaybackStatus.IDLE
 
-                // Immersive while a video is shown; system bars come back when playback ends.
-                LaunchedEffect(playing) { setSystemBarsHidden(playing) }
+                // Auto-enter Ambient clock screen after 3 minutes of inactivity on Home when enabled.
+                LaunchedEffect(screen, playing, autoAmbient, lastInteractionTick) {
+                    if (!playing && screen == Screen.HOME && autoAmbient) {
+                        kotlinx.coroutines.delay(180_000L)
+                        if (!playing && screen == Screen.HOME) screen = Screen.AMBIENT
+                    }
+                }
+
+                // Immersive while a video or ambient screen is shown; system bars come back when leaving.
+                LaunchedEffect(playing, screen) { setSystemBarsHidden(playing || screen == Screen.AMBIENT) }
                 // Opened by a cast and the cast is over: give the screen back to whatever the TV showed before.
                 var wasPlaying by remember { mutableStateOf(playing) }
                 LaunchedEffect(playing) {
@@ -62,16 +74,23 @@ class MainActivity : ComponentActivity() {
 
                 if (playing) {
                     BackHandler { vm.runtime.engine.stop() } // safety exit: Back stops playback and returns Home
-                    PlayerScreen(vm.runtime.engine, playback)
+                    PlayerScreen(vm.runtime.engine, playback, showOsd = showOsd, osdToast = osdToast)
                 } else {
                     // Never interrupt a cast with an update dialog; it appears once playback is over.
                     UpdatePrompt((application as UniversalCastApp).updates)
                     BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
                     when (screen) {
-                        Screen.HOME -> HomeScreen(vm, { screen = Screen.PAIRING }, { screen = Screen.DEVICES }, { screen = Screen.SETTINGS })
+                        Screen.HOME -> HomeScreen(
+                            vm,
+                            onPair = { screen = Screen.PAIRING },
+                            onDevices = { screen = Screen.DEVICES },
+                            onSettings = { screen = Screen.SETTINGS },
+                            onAmbient = { screen = Screen.AMBIENT },
+                        )
                         Screen.PAIRING -> PairingScreen(vm) { screen = Screen.HOME }
                         Screen.DEVICES -> DevicesScreen(vm) { screen = Screen.HOME }
                         Screen.SETTINGS -> SettingsScreen(vm) { screen = Screen.HOME }
+                        Screen.AMBIENT -> AmbientScreen(vm) { screen = Screen.HOME }
                     }
                 }
                 var splash by rememberSaveable { mutableStateOf(true) }
@@ -94,9 +113,11 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        vm.runtime.remoteDispatcher.attachActivity(this)
     }
 
     override fun onPause() {
+        vm.runtime.remoteDispatcher.detachActivity(this)
         activityResumed = false
         super.onPause()
     }
@@ -108,6 +129,7 @@ class MainActivity : ComponentActivity() {
 
     /** While the player is shown: media keys per [ALLOW_REMOTE_MEDIA_KEYS], every other non-system key does nothing. */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        lastInteractionTick = System.currentTimeMillis()
         val snap = vm.runtime.playback.value
         if (snap.status != PlaybackStatus.IDLE && handlePlayerKey(event, snap, vm.runtime.engine)) return true
         return super.dispatchKeyEvent(event)

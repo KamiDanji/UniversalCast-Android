@@ -12,8 +12,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.universalcast.network.NetworkAddresses
+import com.universalcast.playback.SubtitleStyle
+import com.universalcast.receiver.platform.TvRemoteDispatcher
 import com.universalcast.security.Fingerprint
 import com.universalcast.storage.LoadOutcome
+import kotlin.math.abs
 
 @Composable
 fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
@@ -27,8 +30,12 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
     val entries = remember(tick) { rt.log.entries().takeLast(40).reversed() }
     val autostart by rt.settings.autostartOnBoot.collectAsState()
     val autoOpen by rt.settings.autoOpenOnCast.collectAsState()
+    val showOsd by rt.settings.showPlayerOsd.collectAsState()
+    val autoAmbient by rt.settings.autoAmbient.collectAsState()
+    val subStyle by rt.settings.subtitleStyle.collectAsState()
     val ctx = LocalContext.current
     val overlayGranted = remember(tick) { OverlayPermission.granted(ctx) }
+    val a11yGranted = remember(tick) { TvRemoteDispatcher.isAccessibilityEnabled(ctx) }
 
     ScreenScaffold("Settings & diagnostics", onBack) {
         Row(horizontalArrangement = Arrangement.spacedBy(32.dp), modifier = Modifier.fillMaxSize()) {
@@ -59,6 +66,48 @@ fun SettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     }
                     Text("If this TV has no such screen, run once from a computer:", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
                     Text(OverlayPermission.adbCommand(ctx), color = Palette.Text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium)
+                }
+                Card(Modifier.fillMaxWidth()) {
+                    Text("Player OSD & Ambient screen", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Shows a subtle 2-second floating pill in the corner when you seek, change volume/speed, or switch tracks from your phone.",
+                        color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TvButton(if (showOsd) "On-screen status pill: On" else "On-screen status pill: Off", { rt.settings.setShowPlayerOsd(!showOsd) }, primary = showOsd)
+                    TvButton(if (autoAmbient) "Auto ambient clock when idle: On" else "Auto ambient clock when idle: Off", { rt.settings.setAutoAmbient(!autoAmbient) }, primary = autoAmbient)
+                }
+                Card(Modifier.fillMaxWidth()) {
+                    Text("Subtitle styling", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
+                    Text("Size", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for ((label, scale) in listOf("Small" to 0.8f, "Normal" to 1.0f, "Large" to 1.3f, "XL" to 1.65f)) {
+                            val selected = abs(subStyle.fontScale - scale) < 0.08f
+                            TvButton(label, { rt.updateSubtitleStyle(subStyle.copy(fontScale = scale)) }, primary = selected)
+                        }
+                    }
+                    Text("Background opacity", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for ((label, bg) in listOf("None" to 0.0f, "Dim" to 0.55f, "Solid" to 0.9f)) {
+                            val selected = abs(subStyle.backgroundOpacity - bg) < 0.1f
+                            TvButton(label, { rt.updateSubtitleStyle(subStyle.copy(backgroundOpacity = bg)) }, primary = selected)
+                        }
+                    }
+                    Text("Bottom margin", color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for ((label, pad) in listOf("Low" to 0.04f, "Normal" to 0.08f, "High" to 0.14f)) {
+                            val selected = abs(subStyle.bottomPaddingFraction - pad) < 0.02f
+                            TvButton(label, { rt.updateSubtitleStyle(subStyle.copy(bottomPaddingFraction = pad)) }, primary = selected)
+                        }
+                    }
+                }
+                Card(Modifier.fillMaxWidth()) {
+                    Text("Phone TV Remote (Touchpad & D-Pad)", color = Palette.Text, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Your phone can control UniversalCast and TV volume immediately. To also use the phone touchpad across other Android TV apps and Home screen, enable “UniversalCast Phone Remote” in Accessibility settings.",
+                        color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
+                    )
+                    InfoRow("System-wide TV navigation", if (a11yGranted) "enabled" else "in-app + volume only (optional Accessibility service off)")
+                    TvButton("Open Accessibility settings", { TvRemoteDispatcher.openAccessibilitySettings(ctx) }, primary = false)
                 }
                 Card(Modifier.fillMaxWidth()) {
                     val updates = (ctx.applicationContext as com.universalcast.receiver.UniversalCastApp).updates

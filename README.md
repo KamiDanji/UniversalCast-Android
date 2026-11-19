@@ -32,19 +32,24 @@ What still needs a device is listed in `reports/FEATURE_REPORT.md` with a manual
 - Pair by scanning the TV's QR code (or paste the code), compare the 6-digit code, wait for the TV user's approval.
 - Paired TVs are remembered (encrypted); each connection is pinned to the TV's key, whatever IP it has.
 - Finds TVs on the Wi-Fi via mDNS and uses their current address; falls back to the remembered addresses.
-- Remote: play/pause, ±10 s, seek bar, stop, speed, volume, "Cast a link" (direct http/https media URL), share links from other apps into UniversalCast.
+- Remote: play/pause, ±10 s, seek bar, stop, speed, volume, "Cast a link" (direct http/https media URL), **Cast Local Files** (videos/audio from phone storage via the authenticated phone-side HTTP range proxy), share links from other apps into UniversalCast.
+- **Google TV-style Remote & Touchpad**: switch to the **TV Remote & Touchpad** tab for swipe gesture navigation (swipe for D-pad, tap for OK, long-press for Back, horizontal slide to scrub video), classic D-pad mode, plus Back, Home, Mute, Play/Pause and TV Volume +/- keys.
+- **Live Audio & Subtitle Track Switching**: switch audio dubs and subtitle tracks mid-playback, adjust subtitle timing offset (±0.5 s), and customize subtitle size, background opacity and bottom margin live from the phone.
+- **Up Next Queue & Auto-Play**: enqueue multiple videos or website streams (`+ Queue`), reorder/skip/remove items, with automatic advancement when an episode ends.
+- **Media Notification & Lock Screen Controls**: Android `MediaSession` notification with lock-screen transport controls, live seek bar, and hardware volume button control while casting.
+- **Resume History & Bookmarks**: automatically remembers playback positions for 1-tap resume, plus bookmarks and recent video pages in the Cast Browser.
 - **Browser** (Home → Browser, or share a web page into the app): for sites without a Cast button. Play the video,
-  tap "▶ N videos found – Cast", pick the stream and subtitles, cast. The TV plays HLS/DASH/MP4 directly from the CDN
-  with the page's Referer/Origin/User-Agent/cookies. DRM-protected streams are detected and can't be cast.
-  Built-in ad blocker (⋮ menu), pop-ups and "new tab" links stay in the browser, ← only goes back, Back twice closes.
+  tap "▶ N videos found – Cast", pick the stream and subtitles, cast or add to queue. Includes **Phone Proxy Mode** to tunnel IP-locked / HTTP 403 HLS & MP4 streams through the phone's WebView session.
+  Built-in ad blocker (⋮ menu), bookmarks, pop-ups and "new tab" links stay in the browser, ← only goes back, Back twice closes.
 - Observer-role phones see what is playing but cannot control it; the UI says so.
-- Automatic reconnect with backoff, heartbeat, clear messages for revoked / unknown / changed-identity TVs.
+- Automatic reconnect with backoff, heartbeat, **detached playback** (the TV keeps playing if the phone sleeps or disconnects, and re-attaches seamlessly), clear messages for revoked / unknown / changed-identity TVs.
 
 ## TV app features
-- Clean player: only video, subtitles, a buffering spinner and error messages; no on-screen controls (the phone is
-  the remote). Back stops playback; the remote's play/pause key toggles playback.
-- Starts when the TV turns on (setting, default on) and comes to the front when a phone casts (needs "Display over
-  other apps"; see BUILD.md), then goes back to what the TV showed when playback ends.
+- Clean player: video, customizable subtitles, a buffering spinner, optional 2-second floating OSD status pills (for volume, speed, seek, and track switches), and error messages; no on-screen controls (the phone is the remote). Back stops playback; the remote's play/pause key toggles playback.
+- **Ambient Clock Screen**: sleek idle screen with live digital clock, date, receiver status badge and connected phones (with optional auto-ambient after 3 minutes of idle).
+- **Subtitle Styling**: customize subtitle size, background opacity and bottom margin in TV Settings or from the phone.
+- **Phone Remote Support**: responds to D-pad, OK, Back, Home, Media and Volume keys sent from the phone (works in-app and for system volume out of the box, and system-wide across all TV apps when the optional Accessibility service is enabled).
+- Starts when the TV turns on (setting, default on) and comes to the front when a phone casts (needs "Display over other apps"; see BUILD.md), then goes back to what the TV showed when playback ends.
 
 ## Features
 - UCP 1.0: versioned envelopes, request ids, per-direction sequence numbers, sessions, error codes, capabilities, state sync events, duplicate-request protection, size limits (64 KiB frames/messages).

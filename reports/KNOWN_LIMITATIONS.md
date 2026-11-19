@@ -6,8 +6,7 @@
 3. minSdk 23 (TV) / 26 (phone). TLS 1.3 only on API 29+; older devices use TLS 1.2.
 4. The TV player may fetch `http://` media (cleartext allowed for media only); the control channel is always TLS.
 5. Senders pin by QR fingerprint; if the TV's Keystore key is lost, every device must re-pair.
-6. One active session ("last controller wins"). Losing the controlling phone's connection ends the session and stops
-   TV playback (by design of the receiver); a heartbeat-triggered reconnect therefore also stops playback.
+6. One active session ("last controller wins"). When a controlling phone disconnects, the session enters a **detached playback grace period** (default 30 minutes) so TV playback continues uninterrupted and seamlessly re-attaches when the phone reconnects. Revoking a sender immediately ends any active or detached session and stops playback.
 7. Position events are throttled (≈5 s); senders extrapolate from `capturedAtMs`.
 8. No remote device attestation; a rooted TV is out of scope.
 
@@ -26,8 +25,7 @@
     `PlayerScreen.kt` to ignore those keys.
 
 ## Browser casting
-15. The TV fetches the stream itself. Streams whose token is bound to the phone's IP, time-limited, or single-use
-    (the phone's probe consumes one request) may fail on the TV.
+15. By default the TV fetches streams directly. For streams whose token is bound to the phone's IP or that fail with HTTP 403 on the TV, enable **"Proxy stream through this phone"** in the Browser cast sheet (or tap **"Retry via Phone Proxy"** on the remote) to route HLS manifests, segments and progressive streams through the phone's `MediaProxyServer`.
 16. DRM (Widevine/FairPlay/PlayReady, SAMPLE-AES) can't be cast by any method here; such candidates are disabled.
 17. "Scan page" can only read the main document; players in cross-origin iframes are found through their network
     requests, and the after-cast pause can't reach them either (pause the page's video yourself if it keeps playing).
@@ -36,8 +34,7 @@
 19. The phone app keeps cleartext disabled, so `http://` pages don't load in the browser (https pages with http media
     still list the media; the TV may play http media).
 20. onepace.co could not be inspected (it blocks automated fetching); detection is generic and needs a real-device check.
-21. Subtitle renditions inside an HLS master are played by the TV from the master; they are shown as
-    "built-in subtitles" but are not separately selectable on the phone.
+21. Subtitle and audio tracks inside an HLS master or container are exposed in `PlaybackSnapshot` (`audioTracks`, `subtitleTracks`) once loaded and can be switched mid-playback from the phone remote (`playback.selectTracks`), along with subtitle timing offset and visual styling.
 22. Media3's own logcat output is switched off on the TV (to keep URLs/headers out of logcat), which also hides its
     debugging output. Re-enable temporarily in `Media3PlaybackEngine` if needed.
 
@@ -48,5 +45,5 @@
      scripts without a tap are dropped.
 
 ## Phone app
-23. Files stored on the phone can't be cast (the TV fetches media itself; no phone-side HTTP server).
+23. Local video and audio files stored on the phone can be cast via **"Cast Local File"** on the remote, which serves them over the phone's capability-token-authenticated HTTP `MediaProxyServer` with byte-range (`206 Partial Content`) support.
 24. NSD `resolveService` is deprecated on Android 14+ but still works; no replacement path was implemented.

@@ -33,6 +33,96 @@ data class SubtitleInfo(
     val label: String? = null,
 )
 
+enum class TrackKind { AUDIO, SUBTITLE }
+
+/** An audio or subtitle track currently available in the active media item. */
+data class MediaTrack(
+    val id: String,
+    val kind: TrackKind,
+    val label: String,
+    val language: String? = null,
+    val selected: Boolean = false,
+) {
+    fun toJson(): JsonObject = linkedMapOf(
+        "id" to id,
+        "kind" to kind.name,
+        "label" to label,
+        "language" to language,
+        "selected" to selected,
+    )
+
+    companion object {
+        fun fromJson(f: Fields): MediaTrack {
+            val kindName = f.string("kind", 16)
+            val kind = TrackKind.values().firstOrNull { it.name == kindName }
+                ?: throw UcpException(ErrorCode.INVALID_PAYLOAD, "Unknown track kind")
+            return MediaTrack(
+                id = f.string("id", 64),
+                kind = kind,
+                label = f.string("label", 128, 0),
+                language = f.optString("language", 32, 0),
+                selected = f.optBool("selected") ?: false,
+            )
+        }
+    }
+}
+
+/** Visual appearance of subtitles on the TV receiver. */
+data class SubtitleStyle(
+    val fontScale: Float = 1.0f,
+    val backgroundOpacity: Float = 0.6f,
+    val bottomPaddingFraction: Float = 0.08f,
+) {
+    fun toJson(): JsonObject = linkedMapOf(
+        "fontScale" to fontScale.toDouble(),
+        "backgroundOpacity" to backgroundOpacity.toDouble(),
+        "bottomPaddingFraction" to bottomPaddingFraction.toDouble(),
+    )
+
+    companion object {
+        fun fromJson(f: Fields): SubtitleStyle = SubtitleStyle(
+            fontScale = (f.optDouble("fontScale", 0.5, 2.5) ?: 1.0).toFloat(),
+            backgroundOpacity = (f.optDouble("backgroundOpacity", 0.0, 1.0) ?: 0.6).toFloat(),
+            bottomPaddingFraction = (f.optDouble("bottomPaddingFraction", 0.0, 0.35) ?: 0.08).toFloat(),
+        )
+    }
+}
+
+/** Public, header-free view of an item in the playback queue. */
+data class QueueItemSummary(
+    val id: String,
+    val uri: String,
+    val title: String? = null,
+    val mimeType: String? = null,
+) {
+    fun toJson(): JsonObject = linkedMapOf(
+        "id" to id,
+        "uri" to uri,
+        "title" to title,
+        "mimeType" to mimeType,
+    )
+
+    companion object {
+        fun fromJson(f: Fields): QueueItemSummary = QueueItemSummary(
+            id = f.string("id", 64),
+            uri = f.string("uri", 2048),
+            title = f.optString("title", 256, 0),
+            mimeType = f.optString("mimeType", 128, 0),
+        )
+    }
+}
+
+/** Keys supported by `remote.key` for Google TV-style phone remote control. */
+enum class RemoteKey {
+    UP, DOWN, LEFT, RIGHT, CENTER, BACK, HOME,
+    PLAY_PAUSE, REWIND, FAST_FORWARD,
+    MUTE, VOLUME_UP, VOLUME_DOWN;
+
+    companion object {
+        fun fromWire(s: String): RemoteKey? = values().firstOrNull { it.name.equals(s.trim(), ignoreCase = true) }
+    }
+}
+
 /**
  * Immutable view of the player. [revision] increases with every published change, [capturedAtMs] lets a
  * sender extrapolate [positionMs] while [isPlaying]. [durationMs] is null while unknown (e.g. live streams).
@@ -50,6 +140,13 @@ data class PlaybackSnapshot(
     val revision: Long = 0,
     val error: PlaybackErrorInfo? = null,
     val capturedAtMs: Long = 0,
+    val audioTracks: List<MediaTrack> = emptyList(),
+    val subtitleTracks: List<MediaTrack> = emptyList(),
+    val subtitlesEnabled: Boolean = true,
+    val subtitleOffsetMs: Long = 0,
+    val subtitleStyle: SubtitleStyle = SubtitleStyle(),
+    val queue: List<QueueItemSummary> = emptyList(),
+    val queueIndex: Int = -1,
 ) {
     fun toJson(): JsonObject = linkedMapOf(
         "status" to status.name,
@@ -64,9 +161,27 @@ data class PlaybackSnapshot(
         "revision" to revision,
         "capturedAtMs" to capturedAtMs,
         "error" to error?.let { mapOf("code" to it.code, "message" to it.message, "recoverable" to it.recoverable) },
+        "audioTracks" to audioTracks.map { it.toJson() },
+        "subtitleTracks" to subtitleTracks.map { it.toJson() },
+        "subtitlesEnabled" to subtitlesEnabled,
+        "subtitleOffsetMs" to subtitleOffsetMs,
+        "subtitleStyle" to subtitleStyle.toJson(),
+        "queue" to queue.map { it.toJson() },
+        "queueIndex" to queueIndex.toLong(),
     )
 
     companion object {
+        @Suppress("UNCHECKED_CAST")
+        private fun parseObjList(raw: Any?, maxItems: Int): List<Fields> {
+            if (raw == null) return emptyList()
+            val list = raw as? List<*> ?: throw UcpException(ErrorCode.INVALID_PAYLOAD, "Expected array")
+            if (list.size > maxItems) throw UcpException(ErrorCode.INVALID_PAYLOAD, "Too many items")
+            return list.map { item ->
+                val m = item as? Map<String, Any?> ?: throw UcpException(ErrorCode.INVALID_PAYLOAD, "Expected object item")
+                Fields(m)
+            }
+        }
+
         fun fromJson(f: Fields): PlaybackSnapshot {
             val statusName = f.string("status", 32)
             val status = PlaybackStatus.values().firstOrNull { it.name == statusName }
@@ -74,6 +189,9 @@ data class PlaybackSnapshot(
             val err = f.optObj("error")?.let {
                 PlaybackErrorInfo(it.string("code", 64), it.string("message", 512, 0), it.bool("recoverable"))
             }
+            val audioTracks = parseObjList(f.raw["audioTracks"], 32).map { MediaTrack.fromJson(it) }
+            val subtitleTracks = parseObjList(f.raw["subtitleTracks"], 32).map { MediaTrack.fromJson(it) }
+            val queue = parseObjList(f.raw["queue"], 100).map { QueueItemSummary.fromJson(it) }
             return PlaybackSnapshot(
                 status = status,
                 mediaUri = f.optString("mediaUri", 2048),
@@ -87,6 +205,13 @@ data class PlaybackSnapshot(
                 revision = f.long("revision", 0, Long.MAX_VALUE),
                 error = err,
                 capturedAtMs = f.long("capturedAtMs", 0, Long.MAX_VALUE),
+                audioTracks = audioTracks,
+                subtitleTracks = subtitleTracks,
+                subtitlesEnabled = f.optBool("subtitlesEnabled") ?: true,
+                subtitleOffsetMs = f.optLong("subtitleOffsetMs", -60_000, 60_000) ?: 0L,
+                subtitleStyle = f.optObj("subtitleStyle")?.let { SubtitleStyle.fromJson(it) } ?: SubtitleStyle(),
+                queue = queue,
+                queueIndex = (f.optLong("queueIndex", -1, 1000) ?: -1L).toInt(),
             )
         }
     }
@@ -111,9 +236,137 @@ interface PlaybackEngine {
     fun seekTo(positionMs: Long)
     fun setSpeed(speed: Float)
     fun setVolume(volume: Float)
+    fun selectTracks(audioTrackId: String?, subtitleTrackId: String?) {}
+    fun setSubtitleOffset(offsetMs: Long) {}
+    fun setSubtitleStyle(style: SubtitleStyle) {}
+    fun enqueue(item: MediaItemInfo, playNext: Boolean = false, startPositionMs: Long = 0) {
+        load(item, autoplay = true, startPositionMs = startPositionMs)
+    }
+    fun removeQueueItem(id: String) {}
+    fun moveQueueItem(id: String, toIndex: Int) {}
+    fun clearQueue() {}
+    fun skipNext(): Boolean = false
+    fun skipPrevious(): Boolean = false
+    fun jumpToQueueItem(id: String): Boolean = false
+    fun onRemoteKey(key: RemoteKey) {}
     fun addListener(listener: PlaybackListener)
     fun removeListener(listener: PlaybackListener)
     fun release()
+}
+
+/** Full entry in a [PlaybackQueue], retaining request headers in memory while never exposing them in summaries. */
+data class QueueEntry(
+    val id: String,
+    val item: MediaItemInfo,
+    val startPositionMs: Long = 0,
+) {
+    fun toSummary() = QueueItemSummary(id = id, uri = item.uri, title = item.title, mimeType = item.mimeType)
+}
+
+/**
+ * Thread-safe queue state machine shared by [PlaybackEngine] implementations.
+ * Caps queue length at [MAX_ITEMS] so snapshots always remain well below the 64 KiB UCP message limit.
+ */
+class PlaybackQueue {
+    companion object {
+        const val MAX_ITEMS = 50
+    }
+
+    private val items = ArrayList<QueueEntry>()
+    private var currentIndex = -1
+    private var nextSeq = 1L
+
+    @Synchronized
+    fun onDirectLoad(item: MediaItemInfo, startPositionMs: Long = 0) {
+        val existingIdx = items.indexOfFirst { it.item.uri == item.uri }
+        if (existingIdx >= 0 && items.size > 1) {
+            items[existingIdx] = items[existingIdx].copy(item = item, startPositionMs = startPositionMs)
+            currentIndex = existingIdx
+        } else {
+            items.clear()
+            items.add(QueueEntry("q${nextSeq++}", item, startPositionMs))
+            currentIndex = 0
+        }
+    }
+
+    /** Adds [item] to the queue. Returns the entry if it should be loaded and played immediately (when queue was empty/idle). */
+    @Synchronized
+    fun add(item: MediaItemInfo, playNext: Boolean, startPositionMs: Long, isCurrentlyIdle: Boolean): QueueEntry? {
+        if (items.size >= MAX_ITEMS) throw IllegalArgumentException("Queue is full (max $MAX_ITEMS items)")
+        val entry = QueueEntry("q${nextSeq++}", item, startPositionMs)
+        if (isCurrentlyIdle || items.isEmpty() || currentIndex !in items.indices) {
+            items.add(entry)
+            currentIndex = items.lastIndex
+            return entry
+        }
+        val insertAt = if (playNext) (currentIndex + 1).coerceAtMost(items.size) else items.size
+        items.add(insertAt, entry)
+        return null
+    }
+
+    @Synchronized
+    fun remove(id: String): Boolean {
+        val idx = items.indexOfFirst { it.id == id }
+        if (idx < 0) return false
+        items.removeAt(idx)
+        when {
+            items.isEmpty() -> currentIndex = -1
+            idx < currentIndex -> currentIndex--
+            idx == currentIndex -> currentIndex = currentIndex.coerceAtMost(items.lastIndex)
+        }
+        return true
+    }
+
+    @Synchronized
+    fun move(id: String, toIndex: Int): Boolean {
+        val from = items.indexOfFirst { it.id == id }
+        if (from < 0 || items.isEmpty()) return false
+        val target = toIndex.coerceIn(0, items.lastIndex)
+        if (from == target) return true
+        val currentId = items.getOrNull(currentIndex)?.id
+        val moved = items.removeAt(from)
+        items.add(target, moved)
+        if (currentId != null) {
+            currentIndex = items.indexOfFirst { it.id == currentId }
+        }
+        return true
+    }
+
+    @Synchronized
+    fun clear() {
+        items.clear()
+        currentIndex = -1
+    }
+
+    @Synchronized
+    fun next(): QueueEntry? {
+        if (currentIndex + 1 in items.indices) {
+            currentIndex++
+            return items[currentIndex]
+        }
+        return null
+    }
+
+    @Synchronized
+    fun previous(): QueueEntry? {
+        if (currentIndex - 1 in items.indices) {
+            currentIndex--
+            return items[currentIndex]
+        }
+        return null
+    }
+
+    @Synchronized
+    fun jumpTo(id: String): QueueEntry? {
+        val idx = items.indexOfFirst { it.id == id }
+        if (idx < 0) return null
+        currentIndex = idx
+        return items[idx]
+    }
+
+    @Synchronized
+    fun summaries(): Pair<List<QueueItemSummary>, Int> =
+        items.map { it.toSummary() } to currentIndex
 }
 
 /** Primitive player states, mirroring the four Media3 Player.STATE_* values without depending on Media3. */

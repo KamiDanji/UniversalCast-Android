@@ -271,7 +271,24 @@ class IntegrationTest {
         assertEquals(true, b.request(Method.PLAYBACK_PAUSE, session = sb).ok)
     }
 
-    @Test fun droppingTheConnectionReleasesThePlayer() = withEnv { env ->
+    @Test fun droppingTheConnectionKeepsPlayingInDetachedModeAndReattachesOnReconnect() = withEnv { env ->
+        val (sender, c) = env.pairedLogin(Role.CONTROLLER)
+        val sid = Fields(c.call(Method.SESSION_CREATE).payload).string("sessionId")
+        c.call(Method.MEDIA_LOAD, mapOf("uri" to "https://example.org/a.mp4"), sid)
+        c.close()
+        waitFor { env.core.connectedSenders().isEmpty() }
+        waitFor { env.core.sessions.active()?.isDetached == true }
+        assertFalse(env.engine.calls.contains("stop"), "detached playback must keep playing when phone disconnects")
+
+        // Reconnect and resume control seamlessly
+        val c2 = env.login(sender)
+        val created = c2.call(Method.SESSION_CREATE)
+        assertEquals(true, created.payload["resumed"])
+        val sid2 = Fields(created.payload).string("sessionId")
+        assertEquals("PAUSED", snapshotStatus(c2.call(Method.PLAYBACK_PAUSE, session = sid2)))
+    }
+
+    @Test fun droppingTheConnectionReleasesThePlayerWhenGracePeriodIsZero() = withEnv(ReceiverTimeouts(sessionGraceMs = 0)) { env ->
         val (_, c) = env.pairedLogin(Role.CONTROLLER)
         val sid = Fields(c.call(Method.SESSION_CREATE).payload).string("sessionId")
         c.call(Method.MEDIA_LOAD, mapOf("uri" to "https://example.org/a.mp4"), sid)

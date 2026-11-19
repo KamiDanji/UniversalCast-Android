@@ -15,7 +15,13 @@ import androidx.compose.runtime.remember
 import com.universalcast.playback.PlaybackStatus
 
 @Composable
-fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onDevices: () -> Unit, onSettings: () -> Unit) {
+fun HomeScreen(
+    vm: AppViewModel,
+    onPair: () -> Unit,
+    onDevices: () -> Unit,
+    onSettings: () -> Unit,
+    onAmbient: () -> Unit = {},
+) {
     val rt = vm.runtime
     val running by rt.running.collectAsState()
     val error by rt.startError.collectAsState()
@@ -54,6 +60,7 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onDevices: () -> Unit, onSe
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 TvButton("Pair a new device", onPair, Modifier.fillMaxWidth().focusRequester(first), enabled = running)
                 TvButton("Paired devices", onDevices, Modifier.fillMaxWidth(), primary = false)
+                TvButton("Ambient clock screen", onAmbient, Modifier.fillMaxWidth(), primary = false)
                 TvButton("Settings & diagnostics", onSettings, Modifier.fillMaxWidth(), primary = false)
             }
         }

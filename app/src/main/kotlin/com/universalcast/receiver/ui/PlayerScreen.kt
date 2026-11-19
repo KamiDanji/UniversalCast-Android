@@ -1,8 +1,14 @@
 package com.universalcast.receiver.ui
 
+import android.graphics.Color as AndroidColor
+import android.graphics.Typeface
 import android.view.KeyEvent
 import android.view.ViewGroup
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -16,10 +22,14 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
+import com.universalcast.playback.SubtitleStyle
 import com.universalcast.receiver.platform.Media3PlaybackEngine
+import kotlinx.coroutines.delay
 
 /**
  * Physical remote media keys (MEDIA_PLAY_PAUSE / MEDIA_PLAY / MEDIA_PAUSE) toggle playback silently.
@@ -29,17 +39,39 @@ import com.universalcast.receiver.platform.Media3PlaybackEngine
 const val ALLOW_REMOTE_MEDIA_KEYS = true
 
 /**
- * The TV side of playback: video, subtitles, a small spinner while loading/buffering, and an error message when
- * playback fails. Nothing else — no title, seek bar, buttons or status text — and nothing focusable; everything is
- * controlled from the phone. Back (handled by the activity) stops playback and returns Home.
+ * The TV side of playback: video, customizable subtitles, a small spinner while loading/buffering, an optional
+ * 2-second floating OSD status pill in the top-right corner, and an error message when playback fails.
+ * Nothing focusable; everything is controlled from the phone. Back (handled by the activity) stops playback.
  */
+@OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
-fun PlayerScreen(engine: Media3PlaybackEngine, snapshot: PlaybackSnapshot) {
+fun PlayerScreen(
+    engine: Media3PlaybackEngine,
+    snapshot: PlaybackSnapshot,
+    showOsd: Boolean = true,
+    osdToast: Pair<String, Long>? = null,
+) {
     val view = LocalView.current
     DisposableEffect(Unit) {
         view.keepScreenOn = true // the screen must not sleep during playback
         onDispose { view.keepScreenOn = false }
     }
+
+    var visibleToast by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(osdToast, showOsd) {
+        if (!showOsd || osdToast == null) {
+            visibleToast = null
+            return@LaunchedEffect
+        }
+        val age = System.currentTimeMillis() - osdToast.second
+        if (age < 2_200L) {
+            visibleToast = osdToast.first
+            delay((2_200L - age).coerceAtLeast(300L))
+            visibleToast = null
+        }
+    }
+
+    val subStyle = snapshot.subtitleStyle
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
@@ -51,12 +83,13 @@ fun PlayerScreen(engine: Media3PlaybackEngine, snapshot: PlaybackSnapshot) {
                     setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER) // our own spinner below
                     layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                     player = engine.player
-                    // PlayerView's SubtitleView is part of the view itself (above the video surface); with the
-                    // controller disabled nothing covers it, and our Compose overlays stay centred and small.
-                    subtitleView?.apply { setUserDefaultStyle(); setUserDefaultTextSize() }
+                    subtitleView?.let { applySubtitleStyle(it, subStyle) }
                 }
             },
-            update = { it.player = engine.player },
+            update = { pv ->
+                pv.player = engine.player
+                pv.subtitleView?.let { applySubtitleStyle(it, subStyle) }
+            },
             modifier = Modifier.fillMaxSize(),
         )
 
@@ -68,6 +101,26 @@ fun PlayerScreen(engine: Media3PlaybackEngine, snapshot: PlaybackSnapshot) {
                 strokeWidth = 4.dp,
                 modifier = Modifier.align(Alignment.Center).size(56.dp),
             )
+        }
+
+        AnimatedVisibility(
+            visible = showOsd && visibleToast != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopEnd).padding(32.dp),
+        ) {
+            Box(
+                Modifier
+                    .background(Color(0xCC0D131F), RoundedCornerShape(999.dp))
+                    .border(1.dp, Palette.Accent.copy(alpha = 0.45f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    text = visibleToast.orEmpty(),
+                    color = Palette.Text,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
         }
 
         snapshot.error?.let { e ->
@@ -83,6 +136,23 @@ fun PlayerScreen(engine: Media3PlaybackEngine, snapshot: PlaybackSnapshot) {
             }
         }
     }
+}
+
+@OptIn(androidx.media3.common.util.UnstableApi::class)
+private fun applySubtitleStyle(sv: SubtitleView, style: SubtitleStyle) {
+    val bgAlpha = (style.backgroundOpacity.coerceIn(0f, 1f) * 255).toInt()
+    val bgColor = AndroidColor.argb(bgAlpha, 0, 0, 0)
+    val captionStyle = CaptionStyleCompat(
+        AndroidColor.WHITE,
+        bgColor,
+        AndroidColor.TRANSPARENT,
+        CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW,
+        AndroidColor.BLACK,
+        Typeface.DEFAULT_BOLD,
+    )
+    sv.setStyle(captionStyle)
+    sv.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * style.fontScale.coerceIn(0.5f, 2.5f))
+    sv.setBottomPaddingFraction(style.bottomPaddingFraction.coerceIn(0f, 0.35f))
 }
 
 /**

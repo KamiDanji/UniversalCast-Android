@@ -61,6 +61,19 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <service
+            android:name=".platform.TvRemoteAccessibilityService"
+            android:exported="false"
+            android:label="UniversalCast Phone Remote"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/remote_accessibility_service" />
+        </service>
+
         <!-- Exported only because system broadcasts must reach it; it can do nothing but start the receiver service,
              which also happens whenever the app is opened. -->
         <receiver

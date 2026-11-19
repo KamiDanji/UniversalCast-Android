@@ -10,10 +10,15 @@ import com.universalcast.identity.InMemorySenderRegistry
 import com.universalcast.identity.Role
 import com.universalcast.network.Connection
 import com.universalcast.playback.MediaItemInfo
+import com.universalcast.playback.MediaTrack
 import com.universalcast.playback.PlaybackEngine
 import com.universalcast.playback.PlaybackListener
+import com.universalcast.playback.PlaybackQueue
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
+import com.universalcast.playback.RemoteKey
+import com.universalcast.playback.SubtitleStyle
+import com.universalcast.playback.TrackKind
 import com.universalcast.security.EcKeys
 import com.universalcast.security.KeyBackedReceiverIdentity
 import com.universalcast.security.SenderIdentity
@@ -86,13 +91,20 @@ class FakeAdvertiser : ServiceAdvertiser {
 /** In-memory playback engine that records every call and publishes snapshots like a real one. */
 class FakePlaybackEngine : PlaybackEngine {
     private var snap = PlaybackSnapshot()
+    private val queue = PlaybackQueue()
     val calls = CopyOnWriteArrayList<String>()
     private val listeners = CopyOnWriteArrayList<PlaybackListener>()
     override val snapshot: PlaybackSnapshot @Synchronized get() = snap
 
     private fun update(f: (PlaybackSnapshot) -> PlaybackSnapshot) {
+        val (q, qIdx) = queue.summaries()
         val s = synchronized(this) {
-            snap = f(snap).copy(revision = snap.revision + 1, capturedAtMs = System.currentTimeMillis())
+            snap = f(snap).copy(
+                revision = snap.revision + 1,
+                capturedAtMs = System.currentTimeMillis(),
+                queue = q,
+                queueIndex = qIdx,
+            )
             snap
         }
         listeners.forEach { it.onSnapshot(s) }
@@ -101,12 +113,31 @@ class FakePlaybackEngine : PlaybackEngine {
     @Volatile var lastItem: MediaItemInfo? = null
 
     override fun load(item: MediaItemInfo, autoplay: Boolean, startPositionMs: Long) {
+        queue.onDirectLoad(item, startPositionMs)
+        loadInternal(item, autoplay, startPositionMs)
+    }
+
+    private fun loadInternal(item: MediaItemInfo, autoplay: Boolean, startPositionMs: Long) {
         lastItem = item
         calls.add("load:${item.uri}:$autoplay:$startPositionMs")
+        val subTracks = item.subtitles.mapIndexed { idx, s ->
+            MediaTrack(
+                id = "s:0:$idx",
+                kind = TrackKind.SUBTITLE,
+                label = s.label ?: s.language ?: "Subtitle ${idx + 1}",
+                language = s.language,
+                selected = idx == 0,
+            )
+        }
+        val audioTracks = listOf(
+            MediaTrack(id = "a:0:0", kind = TrackKind.AUDIO, label = "Default Audio", language = "en", selected = true),
+            MediaTrack(id = "a:0:1", kind = TrackKind.AUDIO, label = "Original Audio", language = "ja", selected = false),
+        )
         update {
             it.copy(
                 status = if (autoplay) PlaybackStatus.PLAYING else PlaybackStatus.READY, mediaUri = item.uri, title = item.title,
-                positionMs = startPositionMs, durationMs = 60_000, isPlaying = autoplay, error = null
+                positionMs = startPositionMs, durationMs = 60_000, isPlaying = autoplay, error = null,
+                audioTracks = audioTracks, subtitleTracks = subTracks, subtitlesEnabled = subTracks.isNotEmpty(),
             )
         }
     }
@@ -125,7 +156,8 @@ class FakePlaybackEngine : PlaybackEngine {
 
     override fun stop() {
         calls.add("stop")
-        update { PlaybackSnapshot(revision = it.revision, speed = it.speed, volume = it.volume) }
+        queue.clear()
+        update { PlaybackSnapshot(revision = it.revision, speed = it.speed, volume = it.volume, subtitleStyle = it.subtitleStyle) }
     }
 
     override fun seekTo(positionMs: Long) {
@@ -138,6 +170,100 @@ class FakePlaybackEngine : PlaybackEngine {
 
     override fun setVolume(volume: Float) {
         calls.add("volume:$volume"); update { it.copy(volume = volume) }
+    }
+
+    override fun selectTracks(audioTrackId: String?, subtitleTrackId: String?) {
+        calls.add("tracks:${audioTrackId ?: ""}:${subtitleTrackId ?: ""}")
+        update { cur ->
+            val nextAudio = if (audioTrackId != null) {
+                cur.audioTracks.map { t -> t.copy(selected = t.id == audioTrackId) }
+            } else cur.audioTracks
+            val subsOff = subtitleTrackId.equals("off", ignoreCase = true)
+            val nextSubs = when {
+                subsOff -> cur.subtitleTracks.map { t -> t.copy(selected = false) }
+                subtitleTrackId != null -> cur.subtitleTracks.map { t -> t.copy(selected = t.id == subtitleTrackId) }
+                else -> cur.subtitleTracks
+            }
+            val enabled = when {
+                subsOff -> false
+                subtitleTrackId != null -> nextSubs.any { it.selected }
+                else -> cur.subtitlesEnabled
+            }
+            cur.copy(audioTracks = nextAudio, subtitleTracks = nextSubs, subtitlesEnabled = enabled)
+        }
+    }
+
+    override fun setSubtitleOffset(offsetMs: Long) {
+        calls.add("subOffset:$offsetMs")
+        update { it.copy(subtitleOffsetMs = offsetMs) }
+    }
+
+    override fun setSubtitleStyle(style: SubtitleStyle) {
+        calls.add("subStyle:${style.fontScale}:${style.backgroundOpacity}:${style.bottomPaddingFraction}")
+        update { it.copy(subtitleStyle = style) }
+    }
+
+    override fun enqueue(item: MediaItemInfo, playNext: Boolean, startPositionMs: Long) {
+        calls.add("enqueue:${item.uri}:$playNext:$startPositionMs")
+        val immediate = queue.add(item, playNext, startPositionMs, snap.status == PlaybackStatus.IDLE)
+        if (immediate != null) {
+            loadInternal(immediate.item, autoplay = true, startPositionMs = immediate.startPositionMs)
+        } else {
+            update { it }
+        }
+    }
+
+    override fun removeQueueItem(id: String) {
+        calls.add("queueRemove:$id")
+        queue.remove(id)
+        update { it }
+    }
+
+    override fun moveQueueItem(id: String, toIndex: Int) {
+        calls.add("queueMove:$id:$toIndex")
+        queue.move(id, toIndex)
+        update { it }
+    }
+
+    override fun clearQueue() {
+        calls.add("queueClear")
+        queue.clear()
+        update { it }
+    }
+
+    override fun skipNext(): Boolean {
+        val next = queue.next() ?: return false
+        calls.add("queueNext:${next.id}")
+        loadInternal(next.item, autoplay = true, startPositionMs = next.startPositionMs)
+        return true
+    }
+
+    override fun skipPrevious(): Boolean {
+        val prev = queue.previous() ?: return false
+        calls.add("queuePrev:${prev.id}")
+        loadInternal(prev.item, autoplay = true, startPositionMs = prev.startPositionMs)
+        return true
+    }
+
+    override fun jumpToQueueItem(id: String): Boolean {
+        val target = queue.jumpTo(id) ?: return false
+        calls.add("queueJump:${target.id}")
+        loadInternal(target.item, autoplay = true, startPositionMs = target.startPositionMs)
+        return true
+    }
+
+    /** Simulates the current media reaching the end (triggers auto-advance if a next queue item exists). */
+    fun simulateEnded() {
+        val next = queue.next()
+        if (next != null) {
+            loadInternal(next.item, autoplay = true, startPositionMs = next.startPositionMs)
+        } else {
+            update { it.copy(status = PlaybackStatus.ENDED, isPlaying = false) }
+        }
+    }
+
+    override fun onRemoteKey(key: RemoteKey) {
+        calls.add("key:${key.name}")
     }
 
     override fun addListener(listener: PlaybackListener) {

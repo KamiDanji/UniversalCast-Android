@@ -1,12 +1,15 @@
 package com.universalcast.receiver
 
 import android.view.KeyEvent
+import com.universalcast.playback.MediaTrack
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
+import com.universalcast.playback.TrackKind
 import com.universalcast.receiver.policy.AutoLaunchDecision
 import com.universalcast.receiver.policy.AutoLaunchDecision.Reason
 import com.universalcast.receiver.policy.AutoLaunchPolicy
 import com.universalcast.receiver.policy.CastStartDetector
+import com.universalcast.receiver.policy.PlayerOsdTracker
 import com.universalcast.receiver.policy.shouldAutostart
 import com.universalcast.receiver.ui.OverlayPermission
 import com.universalcast.receiver.ui.PlayerKeyPolicy
@@ -95,5 +98,36 @@ class PoliciesTest {
 
     @Test fun adbFallbackNamesThePackage() {
         assertEquals("adb shell appops set com.universalcast.receiver.debug SYSTEM_ALERT_WINDOW allow", OverlayPermission.adbCommand("com.universalcast.receiver.debug"))
+    }
+
+    @Test fun playerOsdTrackerEmitsConcisePillsOnChanges() {
+        val tracker = PlayerOsdTracker()
+        val base = PlaybackSnapshot(
+            status = PlaybackStatus.PLAYING,
+            mediaUri = "https://h/ep1.mp4",
+            title = "Episode 1",
+            positionMs = 10_000,
+            durationMs = 120_000,
+            isPlaying = true,
+            volume = 1.0f,
+            speed = 1.0f,
+            audioTracks = listOf(
+                MediaTrack("a:0:0", TrackKind.AUDIO, "English", "en", true),
+                MediaTrack("a:0:1", TrackKind.AUDIO, "Japanese", "ja", false),
+            ),
+            subtitleTracks = listOf(
+                MediaTrack("s:0:0", TrackKind.SUBTITLE, "English", "en", true),
+                MediaTrack("s:0:1", TrackKind.SUBTITLE, "Spanish", "es", false),
+            ),
+        )
+        assertEquals("▶ Episode 1", tracker.onSnapshot(base))
+        assertEquals(null, tracker.onSnapshot(base.copy(positionMs = 13_000)), "normal tick produces no OSD")
+        assertEquals("Volume 50%", tracker.onSnapshot(base.copy(volume = 0.5f)))
+        assertEquals("Speed 1.5×", tracker.onSnapshot(base.copy(volume = 0.5f, speed = 1.5f)))
+        assertEquals("Paused", tracker.onSnapshot(base.copy(volume = 0.5f, speed = 1.5f, status = PlaybackStatus.PAUSED, isPlaying = false)))
+        assertEquals("Playing", tracker.onSnapshot(base.copy(volume = 0.5f, speed = 1.5f, status = PlaybackStatus.PLAYING, isPlaying = true)))
+        assertEquals("1:00 / 2:00", tracker.onSnapshot(base.copy(volume = 0.5f, speed = 1.5f, positionMs = 60_000)))
+        assertEquals("Subtitle delay: +0.5s", tracker.onSnapshot(base.copy(volume = 0.5f, speed = 1.5f, positionMs = 60_000, subtitleOffsetMs = 500)))
+        assertEquals("Subtitles: Off", tracker.onSnapshot(base.copy(volume = 0.5f, speed = 1.5f, positionMs = 60_000, subtitleOffsetMs = 500, subtitlesEnabled = false)))
     }
 }

@@ -15,8 +15,9 @@ data class MediaCast(
     val headers: Map<String, String> = emptyMap(),
     val subtitles: List<SubtitleInfo> = emptyList(),
     val autoplay: Boolean = true,
+    val startPositionMs: Long = 0,
 ) {
-    override fun toString() = "MediaCast(uri=$uri, title=$title, mimeType=$mimeType, headers=${headers.keys}, subtitles=${subtitles.size}, autoplay=$autoplay)"
+    override fun toString() = "MediaCast(uri=$uri, title=$title, mimeType=$mimeType, headers=${headers.keys}, subtitles=${subtitles.size}, autoplay=$autoplay, startPositionMs=$startPositionMs)"
 }
 
 /**

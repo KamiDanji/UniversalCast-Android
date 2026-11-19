@@ -202,15 +202,18 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
     var webView by remember { mutableStateOf<WebView?>(null) }
     var webViewGeneration by remember { mutableIntStateOf(0) }
     var showSheet by remember { mutableStateOf(false) }
+    var showBookmarks by remember { mutableStateOf(false) }
     var showRemote by remember { mutableStateOf(false) }
-    var chooseTvFor by remember { mutableStateOf<MediaCast?>(null) }
-    var pendingCast by remember { mutableStateOf<MediaCast?>(null) }
+    var chooseTvFor by remember { mutableStateOf<Triple<MediaCast, Boolean, Boolean>?>(null) }
+    var pendingCast by remember { mutableStateOf<Triple<MediaCast, Boolean, Boolean>?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var scanning by remember { mutableStateOf(false) }
     var canGoBack by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var lastBackAtMs by remember { mutableLongStateOf(0L) }
     val adBlock by vm.browserAdBlock.collectAsState()
+    val bookmarks by rt.bookmarks.collectAsState()
+    val history by rt.history.collectAsState()
     val blockedCount by page.blocked.collectAsState()
     LaunchedEffect(adBlock) { page.adBlockEnabled = adBlock }
     val engine by rt.filters.engine.collectAsState()
@@ -254,25 +257,42 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
     }
 
     /** Uses the connected TV; else the only paired TV; else asks which one. */
-    fun cast(cast: MediaCast) {
+    fun cast(cast: MediaCast, useProxy: Boolean = false, enqueue: Boolean = false) {
         val s = rt.state.value
+        val req = Triple(cast, useProxy, enqueue)
         when {
-            s.phase == ConnectionPhase.CONNECTED && s.canControl -> { rt.controller.load(cast); afterCast() }
+            s.phase == ConnectionPhase.CONNECTED && s.canControl -> {
+                rt.castMedia(cast, pageUrl = page.currentPageUrl, useProxy = useProxy, enqueue = enqueue)
+                if (enqueue) {
+                    showSheet = false
+                    notice = "Added to queue on ${s.receiver?.name ?: "TV"}."
+                } else {
+                    afterCast()
+                }
+            }
             s.phase == ConnectionPhase.CONNECTED -> notice = "This phone is only an observer on ${s.receiver?.name ?: "this TV"}; it can't start videos."
-            s.phase == ConnectionPhase.CONNECTING || s.phase == ConnectionPhase.RECONNECTING -> { pendingCast = cast; notice = "Connecting to ${s.receiver?.name ?: "the TV"}…" }
-            receivers.size == 1 -> { pendingCast = cast; rt.connect(receivers.single()); notice = "Connecting to ${receivers.single().name}…" }
+            s.phase == ConnectionPhase.CONNECTING || s.phase == ConnectionPhase.RECONNECTING -> { pendingCast = req; notice = "Connecting to ${s.receiver?.name ?: "the TV"}…" }
+            receivers.size == 1 -> { pendingCast = req; rt.connect(receivers.single()); notice = "Connecting to ${receivers.single().name}…" }
             receivers.isEmpty() -> notice = "Pair a TV first: go back and tap “Pair a TV”."
-            else -> chooseTvFor = cast
+            else -> chooseTvFor = req
         }
     }
 
     // A cast waiting for its connection.
     LaunchedEffect(st.phase, pendingCast) {
-        val p = pendingCast ?: return@LaunchedEffect
+        val (p, useProxy, enqueue) = pendingCast ?: return@LaunchedEffect
         when (st.phase) {
             ConnectionPhase.CONNECTED -> {
                 pendingCast = null; notice = null
-                if (st.canControl) { rt.controller.load(p); afterCast() } else notice = "This phone is only an observer on ${st.receiver?.name}; it can't start videos."
+                if (st.canControl) {
+                    rt.castMedia(p, pageUrl = page.currentPageUrl, useProxy = useProxy, enqueue = enqueue)
+                    if (enqueue) {
+                        showSheet = false
+                        notice = "Added to queue on ${st.receiver?.name ?: "TV"}."
+                    } else {
+                        afterCast()
+                    }
+                } else notice = "This phone is only an observer on ${st.receiver?.name}; it can't start videos."
             }
             ConnectionPhase.FAILED -> { pendingCast = null; notice = st.message ?: "Couldn't connect to the TV." }
             else -> {}
@@ -285,6 +305,7 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
         when {
             showRemote -> showRemote = false
             showSheet -> showSheet = false
+            showBookmarks -> showBookmarks = false
             menuOpen -> menuOpen = false
             w != null && w.canGoBack() -> w.goBack()
             // At the first page: only a second Back within 2 s leaves the browser (a stray Back must not lose the page).
@@ -332,6 +353,22 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                         Box {
                             IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "Menu", tint = Palette.Text) }
                             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                val currentUrl = page.currentPageUrl
+                                if (!currentUrl.isNullOrBlank()) {
+                                    val isBookmarked = bookmarks.any { it.url == currentUrl }
+                                    DropdownMenuItem(
+                                        text = { Text(if (isBookmarked) "★ Bookmarked (tap to remove)" else "☆ Bookmark this page") },
+                                        onClick = {
+                                            val added = rt.toggleBookmark(currentUrl, page.title)
+                                            notice = if (added) "Page bookmarked." else "Bookmark removed."
+                                            menuOpen = false
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("Bookmarks (${bookmarks.size})") },
+                                    onClick = { menuOpen = false; showBookmarks = true },
+                                )
                                 DropdownMenuItem(
                                     text = { Text(if (adBlock) "Ad blocker: on ($blockedCount blocked)" else "Ad blocker: off") },
                                     trailingIcon = { Switch(checked = adBlock, onCheckedChange = null) },
@@ -478,14 +515,60 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                     )
                 }
                 if (address.isEmpty()) {
-                    Column(Modifier.fillMaxSize().background(Palette.Background).padding(24.dp), verticalArrangement = Arrangement.Center) {
-                        Text("Cast from a website", style = MaterialTheme.typography.titleMedium, color = Palette.Text)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "Open the page with the video and start it playing. UniversalCast finds the stream the page plays " +
-                                "(HLS .m3u8, DASH, MP4…) and the TV plays it directly.",
-                            color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
-                        )
+                    LazyColumn(
+                        Modifier.fillMaxSize().background(Palette.Background).padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        item {
+                            Text("Cast from a website", style = MaterialTheme.typography.titleMedium, color = Palette.Text)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                "Open the page with the video and start it playing. UniversalCast finds the stream the page plays " +
+                                    "(HLS .m3u8, DASH, MP4…) and casts it to your TV.",
+                                color = Palette.TextDim, style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        if (bookmarks.isNotEmpty()) {
+                            item {
+                                Spacer(Modifier.height(8.dp))
+                                Text("Bookmarks", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                            }
+                            items(bookmarks, key = { it.url }) { bm ->
+                                Surface(
+                                    color = Palette.Surface,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().clickable { address = bm.url; go(bm.url) },
+                                ) {
+                                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("★ ${bm.title}", color = Palette.Text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(bm.url, color = Palette.TextDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                        TextButton(onClick = { rt.removeBookmark(bm.url) }) { Text("✕", color = Palette.TextDim) }
+                                    }
+                                }
+                            }
+                        }
+                        val recentPages = history.filter { !it.pageUrl.isNullOrBlank() }.distinctBy { it.pageUrl }.take(5)
+                        if (recentPages.isNotEmpty()) {
+                            item {
+                                Spacer(Modifier.height(8.dp))
+                                Text("Recent Video Pages", style = MaterialTheme.typography.titleSmall, color = Palette.Text)
+                            }
+                            items(recentPages, key = { it.pageUrl!! }) { entry ->
+                                val pg = entry.pageUrl!!
+                                Surface(
+                                    color = Palette.Surface,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().clickable { address = pg; go(pg) },
+                                ) {
+                                    Column(Modifier.padding(12.dp)) {
+                                        Text(entry.title ?: pg, color = Palette.Text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(pg, color = Palette.TextDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 notice?.let { n ->
@@ -493,6 +576,39 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                         Row(Modifier.padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(n, color = Palette.Text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f, fill = false))
                             TextButton(onClick = { notice = null }) { Text("OK") }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showBookmarks) {
+            ModalBottomSheet(onDismissRequest = { showBookmarks = false }, containerColor = Palette.Surface) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Bookmarks", style = MaterialTheme.typography.titleMedium, color = Palette.Text)
+                    if (bookmarks.isEmpty()) {
+                        Text("No bookmarks yet. Open a website and choose “☆ Bookmark this page” in the ⋮ menu.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(bookmarks, key = { it.url }) { bm ->
+                                Surface(
+                                    color = Palette.SurfaceHigh,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        showBookmarks = false
+                                        address = bm.url
+                                        go(bm.url)
+                                    },
+                                ) {
+                                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(bm.title, color = Palette.Text, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(bm.url, color = Palette.TextDim, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        }
+                                        TextButton(onClick = { rt.removeBookmark(bm.url) }) { Text("Remove", color = Palette.Danger) }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -519,11 +635,11 @@ fun BrowserScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit
                             page.bump()
                         }
                     },
-                    onCast = { candidate, uriOverride, subs ->
+                    onCast = { candidate, uriOverride, subs, useProxy, enqueue ->
                         val target = if (uriOverride != null) candidate.copy(url = uriOverride) else candidate
                         // Cookies are read now, for the stream's own URL only (the TV sends them only to that host).
                         val cookie = runCatching { CookieManager.getInstance().getCookie(target.url) }.getOrNull()
-                        cast(BrowserCast.build(target, subs, page.title, cookie))
+                        cast(BrowserCast.build(target, subs, page.title, cookie), useProxy = useProxy, enqueue = enqueue)
                     },
                 )
             }
@@ -562,7 +678,7 @@ private fun CastSheet(
     tvName: String,
     onScan: () -> Unit,
     onProbe: (StreamCandidate) -> Unit,
-    onCast: (StreamCandidate, String?, List<SubtitleCandidate>) -> Unit,
+    onCast: (StreamCandidate, String?, List<SubtitleCandidate>, Boolean, Boolean) -> Unit,
 ) {
     // Probe lazily, once per candidate, when the sheet is open.
     val probed = remember { HashSet<String>() }
@@ -572,6 +688,7 @@ private fun CastSheet(
     val selected = streams.firstOrNull { it.url == selectedUrl } ?: streams.firstOrNull { !it.isProtected } ?: streams.firstOrNull()
     var variantUri by remember(selected?.url) { mutableStateOf<String?>(null) }
     var chosenSubs by remember { mutableStateOf<Set<String>?>(null) }
+    var proxyThroughPhone by remember { mutableStateOf(false) }
     // Default: the first English-looking subtitle (if any).
     val subsSelection = chosenSubs ?: setOfNotNull(subtitles.firstOrNull { MediaSniffer.looksEnglish(it.language, it.label) }?.url)
 
@@ -613,15 +730,29 @@ private fun CastSheet(
         if (selected?.isProtected == true) {
             Text("This stream is DRM-protected (Widevine/FairPlay). It can't be cast by any method in this app.", color = Palette.Danger, style = MaterialTheme.typography.bodySmall)
         }
-        Button(
-            onClick = { selected?.let { onCast(it, variantUri, subtitles.filter { s -> s.url in subsSelection }) } },
-            enabled = selected != null && !selected.isProtected,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("Cast to $tvName") }
-        Text(
-            "The TV fetches the stream itself. Links that are one-time, or bound to this phone's IP, may not play on the TV.",
-            color = Palette.TextDim, style = MaterialTheme.typography.bodySmall,
-        )
+        Row(
+            Modifier.fillMaxWidth().clickable { proxyThroughPhone = !proxyThroughPhone }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Proxy stream through this phone", color = Palette.Text, style = MaterialTheme.typography.bodyMedium)
+                Text("Fixes HTTP 403 / IP-bound tokens by fetching segments on this phone.", color = Palette.TextDim, style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(checked = proxyThroughPhone, onCheckedChange = { proxyThroughPhone = it })
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = { selected?.let { onCast(it, variantUri, subtitles.filter { s -> s.url in subsSelection }, proxyThroughPhone, false) } },
+                enabled = selected != null && !selected.isProtected,
+                modifier = Modifier.weight(1.4f),
+            ) { Text("Cast to $tvName") }
+            OutlinedButton(
+                onClick = { selected?.let { onCast(it, variantUri, subtitles.filter { s -> s.url in subsSelection }, proxyThroughPhone, true) } },
+                enabled = selected != null && !selected.isProtected,
+                modifier = Modifier.weight(1f),
+            ) { Text("+ Queue") }
+        }
         OutlinedButton(onClick = onScan) { Text("Scan page again") }
     }
 }

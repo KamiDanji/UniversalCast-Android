@@ -16,6 +16,7 @@ object Ucp {
     const val PAIRING_WINDOW_MS = 120_000L
     const val AUTH_TIMEOUT_MS = 10_000L
     const val CHALLENGE_TTL_MS = 10_000L
+    const val SESSION_GRACE_MS = 30 * 60_000L
     const val DUPLICATE_CACHE_SIZE = 256
     const val MAX_MALFORMED_MESSAGES = 5
     const val MAX_UNAUTHENTICATED_CONNECTIONS = 16
@@ -72,6 +73,17 @@ object Method {
     const val PLAYBACK_SET_SPEED = "playback.setSpeed"
     const val PLAYBACK_SET_VOLUME = "playback.setVolume"
     const val PLAYBACK_SNAPSHOT = "playback.snapshot"
+    const val PLAYBACK_SELECT_TRACKS = "playback.selectTracks"
+    const val PLAYBACK_SET_SUBTITLE_OFFSET = "playback.setSubtitleOffset"
+    const val PLAYBACK_SET_SUBTITLE_STYLE = "playback.setSubtitleStyle"
+    const val QUEUE_ADD = "queue.add"
+    const val QUEUE_REMOVE = "queue.remove"
+    const val QUEUE_REORDER = "queue.reorder"
+    const val QUEUE_CLEAR = "queue.clear"
+    const val QUEUE_NEXT = "queue.next"
+    const val QUEUE_PREVIOUS = "queue.previous"
+    const val QUEUE_JUMP = "queue.jump"
+    const val REMOTE_KEY = "remote.key"
 }
 
 object EventName {

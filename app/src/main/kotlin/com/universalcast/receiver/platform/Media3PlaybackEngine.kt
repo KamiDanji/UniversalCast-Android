@@ -10,6 +10,8 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
@@ -22,13 +24,19 @@ import okhttp3.OkHttpClient
 import com.universalcast.playback.EngineState
 import com.universalcast.playback.MediaHeaders
 import com.universalcast.playback.MediaItemInfo
+import com.universalcast.playback.MediaTrack
 import com.universalcast.playback.PlaybackEngine
 import com.universalcast.playback.PlaybackErrorInfo
 import com.universalcast.playback.PlaybackListener
+import com.universalcast.playback.PlaybackQueue
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatusDeriver
+import com.universalcast.playback.RemoteKey
+import com.universalcast.playback.SubtitleStyle
+import com.universalcast.playback.TrackKind
 import com.universalcast.ucp.ErrorCode
 import com.universalcast.ucp.UcpException
+import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
 import java.util.concurrent.FutureTask
@@ -49,14 +57,24 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     private val listeners = CopyOnWriteArrayList<PlaybackListener>()
 
     private var exo: ExoPlayer? = null
+    private val queue = PlaybackQueue()
     private var revision = 0L
     private var mediaUri: String? = null
     private var title: String? = null
     private var error: PlaybackErrorInfo? = null
     private var hasBeenReady = false
     private var hasStarted = false
+    private var subtitlesEnabled = true
+    private var subtitleOffsetMs = 0L
+    private var subtitleStyle = SubtitleStyle()
     private var lastPublished: PlaybackSnapshot? = null
     private var released = false
+
+    @Volatile
+    var onSubtitleStyleChanged: ((SubtitleStyle) -> Unit)? = null
+
+    @Volatile
+    var onRemoteKeyReceived: ((RemoteKey) -> Unit)? = null
 
     init {
         // Media3's own logcat output can include request details of failed loads (URLs with signed query strings).
@@ -71,6 +89,13 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     private val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_READY) hasBeenReady = true
+            if (playbackState == Player.STATE_ENDED) {
+                val next = queue.next()
+                if (next != null) {
+                    loadInternal(next.item, autoplay = true, startPositionMs = next.startPositionMs)
+                    return
+                }
+            }
             publish()
         }
 
@@ -80,6 +105,7 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         }
 
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) = publish()
+        override fun onTracksChanged(tracks: Tracks) = publish()
         override fun onPlayerError(e: PlaybackException) {
             error = PlaybackErrorInfo(e.errorCodeName, describe(e).take(200), recoverable = true)
             publish()
@@ -141,11 +167,68 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         }
     }
 
+    private fun extractTracks(p: ExoPlayer): Pair<List<MediaTrack>, List<MediaTrack>> {
+        val audio = ArrayList<MediaTrack>()
+        val subs = ArrayList<MediaTrack>()
+        for ((gIdx, group) in p.currentTracks.groups.withIndex()) {
+            when (group.type) {
+                C.TRACK_TYPE_AUDIO -> {
+                    for (tIdx in 0 until group.length) {
+                        val fmt = group.getTrackFormat(tIdx)
+                        val langName = fmt.language?.takeIf { it.isNotBlank() && it != "und" }?.let {
+                            runCatching { Locale.forLanguageTag(it).getDisplayLanguage(Locale.ENGLISH) }.getOrNull()
+                        }?.takeIf { it.isNotBlank() }
+                        val channels = if (fmt.channelCount > 2) " (${fmt.channelCount}ch)" else ""
+                        val label = listOfNotNull(fmt.label?.takeIf { it.isNotBlank() }, langName).distinct().joinToString(" · ")
+                            .ifEmpty { "Audio ${audio.size + 1}" } + channels
+                        audio.add(
+                            MediaTrack(
+                                id = "a:$gIdx:$tIdx",
+                                kind = TrackKind.AUDIO,
+                                label = label.take(80),
+                                language = fmt.language,
+                                selected = group.isTrackSelected(tIdx),
+                            )
+                        )
+                    }
+                }
+                C.TRACK_TYPE_TEXT -> {
+                    for (tIdx in 0 until group.length) {
+                        val fmt = group.getTrackFormat(tIdx)
+                        val langName = fmt.language?.takeIf { it.isNotBlank() && it != "und" }?.let {
+                            runCatching { Locale.forLanguageTag(it).getDisplayLanguage(Locale.ENGLISH) }.getOrNull()
+                        }?.takeIf { it.isNotBlank() }
+                        val label = listOfNotNull(fmt.label?.takeIf { it.isNotBlank() }, langName).distinct().joinToString(" · ")
+                            .ifEmpty { "Subtitle ${subs.size + 1}" }
+                        subs.add(
+                            MediaTrack(
+                                id = "s:$gIdx:$tIdx",
+                                kind = TrackKind.SUBTITLE,
+                                label = label.take(80),
+                                language = fmt.language,
+                                selected = subtitlesEnabled && group.isTrackSelected(tIdx),
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        return audio.take(24) to subs.take(24)
+    }
+
     private fun build(bumpRevision: Boolean): PlaybackSnapshot {
         val p = exo
         val now = System.currentTimeMillis()
+        val (queueList, queueIdx) = queue.summaries()
         if (p == null || mediaUri == null) {
-            return PlaybackSnapshot(revision = revision, capturedAtMs = now, error = error)
+            return PlaybackSnapshot(
+                revision = revision,
+                capturedAtMs = now,
+                error = error,
+                subtitleStyle = subtitleStyle,
+                queue = queueList,
+                queueIndex = queueIdx,
+            )
         }
         val state = when (p.playbackState) {
             Player.STATE_BUFFERING -> EngineState.BUFFERING
@@ -155,6 +238,7 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         }
         val status = PlaybackStatusDeriver.derive(state, p.playWhenReady, true, error != null, hasBeenReady, hasStarted)
         val duration = p.duration.takeIf { it != androidx.media3.common.C.TIME_UNSET && it >= 0 }
+        val (audioTracks, subtitleTracks) = extractTracks(p)
         if (bumpRevision) revision++
         return PlaybackSnapshot(
             status = status,
@@ -169,6 +253,13 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
             revision = revision,
             error = error,
             capturedAtMs = now,
+            audioTracks = audioTracks,
+            subtitleTracks = subtitleTracks,
+            subtitlesEnabled = subtitlesEnabled,
+            subtitleOffsetMs = subtitleOffsetMs,
+            subtitleStyle = subtitleStyle,
+            queue = queueList,
+            queueIndex = queueIdx,
         )
     }
 
@@ -188,8 +279,13 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     override val snapshot: PlaybackSnapshot get() = onMain { build(false) }
 
     override fun load(item: MediaItemInfo, autoplay: Boolean, startPositionMs: Long) = onMain {
+        queue.onDirectLoad(item, startPositionMs)
+        loadInternal(item, autoplay, startPositionMs)
+    }
+
+    private fun loadInternal(item: MediaItemInfo, autoplay: Boolean, startPositionMs: Long) {
         val p = ensurePlayer()
-        error = null; hasBeenReady = false; hasStarted = false
+        error = null; hasBeenReady = false; hasStarted = false; subtitlesEnabled = true; subtitleOffsetMs = 0L
         mediaUri = item.uri; title = item.title
         p.stop() // release the previous item's loaders before its request context is replaced
         requestContext = RequestContext.of(item)
@@ -209,6 +305,12 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
             .apply { mime?.let { setMimeType(it) } }
             .setSubtitleConfigurations(subtitles)
             .setMediaMetadata(MediaMetadata.Builder().setTitle(item.title).build())
+            .build()
+        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+            .clearOverrides()
+            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+            .setPreferredTextLanguage("en")
+            .setSelectUndeterminedTextLanguage(true)
             .build()
         p.setMediaItem(mi, startPositionMs.coerceAtLeast(0))
         p.playWhenReady = autoplay
@@ -282,6 +384,7 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     override fun stop() = onMain {
         val p = ensurePlayer()
         p.stop(); p.clearMediaItems()
+        queue.clear()
         requestContext = null
         mediaUri = null; title = null; error = null; hasBeenReady = false; hasStarted = false
         publish()
@@ -290,6 +393,109 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     override fun seekTo(positionMs: Long) = onMain { ensurePlayer().seekTo(positionMs.coerceAtLeast(0)); publish() }
     override fun setSpeed(speed: Float) = onMain { ensurePlayer().setPlaybackSpeed(speed); publish() }
     override fun setVolume(volume: Float) = onMain { ensurePlayer().volume = volume.coerceIn(0f, 1f); publish() }
+
+    override fun selectTracks(audioTrackId: String?, subtitleTrackId: String?) = onMain {
+        val p = ensurePlayer()
+        val builder = p.trackSelectionParameters.buildUpon()
+        val groups = p.currentTracks.groups
+        if (audioTrackId != null) {
+            parseTrackId(audioTrackId, "a")?.let { (gIdx, tIdx) ->
+                val group = groups.getOrNull(gIdx)
+                if (group != null && group.type == C.TRACK_TYPE_AUDIO && tIdx in 0 until group.length) {
+                    builder.clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                    builder.addOverride(TrackSelectionOverride(group.mediaTrackGroup, listOf(tIdx)))
+                }
+            }
+        }
+        if (subtitleTrackId != null) {
+            if (subtitleTrackId.equals("off", ignoreCase = true)) {
+                subtitlesEnabled = false
+                builder.clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            } else {
+                parseTrackId(subtitleTrackId, "s")?.let { (gIdx, tIdx) ->
+                    val group = groups.getOrNull(gIdx)
+                    if (group != null && group.type == C.TRACK_TYPE_TEXT && tIdx in 0 until group.length) {
+                        subtitlesEnabled = true
+                        builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                        builder.clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                        builder.addOverride(TrackSelectionOverride(group.mediaTrackGroup, listOf(tIdx)))
+                    }
+                }
+            }
+        }
+        p.trackSelectionParameters = builder.build()
+        publish()
+    }
+
+    private fun parseTrackId(id: String, prefix: String): Pair<Int, Int>? {
+        val parts = id.split(':')
+        if (parts.size != 3 || parts[0] != prefix) return null
+        val g = parts[1].toIntOrNull() ?: return null
+        val t = parts[2].toIntOrNull() ?: return null
+        return g to t
+    }
+
+    override fun setSubtitleOffset(offsetMs: Long) = onMain {
+        subtitleOffsetMs = offsetMs.coerceIn(-60_000L, 60_000L)
+        publish()
+    }
+
+    override fun setSubtitleStyle(style: SubtitleStyle) = onMain {
+        subtitleStyle = style
+        runCatching { onSubtitleStyleChanged?.invoke(style) }
+        publish()
+    }
+
+    fun applyInitialSubtitleStyle(style: SubtitleStyle) = onMain {
+        subtitleStyle = style
+    }
+
+    override fun enqueue(item: MediaItemInfo, playNext: Boolean, startPositionMs: Long) = onMain {
+        val immediate = queue.add(item, playNext, startPositionMs, mediaUri == null)
+        if (immediate != null) {
+            loadInternal(immediate.item, autoplay = true, startPositionMs = immediate.startPositionMs)
+        } else {
+            publish()
+        }
+    }
+
+    override fun removeQueueItem(id: String) = onMain {
+        queue.remove(id)
+        publish()
+    }
+
+    override fun moveQueueItem(id: String, toIndex: Int) = onMain {
+        queue.move(id, toIndex)
+        publish()
+    }
+
+    override fun clearQueue() = onMain {
+        queue.clear()
+        publish()
+    }
+
+    override fun skipNext(): Boolean = onMain {
+        val next = queue.next() ?: return@onMain false
+        loadInternal(next.item, autoplay = true, startPositionMs = next.startPositionMs)
+        true
+    }
+
+    override fun skipPrevious(): Boolean = onMain {
+        val prev = queue.previous() ?: return@onMain false
+        loadInternal(prev.item, autoplay = true, startPositionMs = prev.startPositionMs)
+        true
+    }
+
+    override fun jumpToQueueItem(id: String): Boolean = onMain {
+        val target = queue.jumpTo(id) ?: return@onMain false
+        loadInternal(target.item, autoplay = true, startPositionMs = target.startPositionMs)
+        true
+    }
+
+    override fun onRemoteKey(key: RemoteKey) {
+        onMain { runCatching { onRemoteKeyReceived?.invoke(key) } }
+    }
 
     override fun addListener(listener: PlaybackListener) { listeners.add(listener) }
     override fun removeListener(listener: PlaybackListener) { listeners.remove(listener) }

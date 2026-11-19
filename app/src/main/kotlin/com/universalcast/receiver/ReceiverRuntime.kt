@@ -20,7 +20,9 @@ import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.receiver.platform.KeystoreIdentityProvider
 import com.universalcast.receiver.platform.Media3PlaybackEngine
 import com.universalcast.receiver.platform.NsdAdvertiser
+import com.universalcast.receiver.platform.TvRemoteDispatcher
 import com.universalcast.receiver.policy.CastStartDetector
+import com.universalcast.receiver.policy.PlayerOsdTracker
 import com.universalcast.security.ReceiverIdentity
 import com.universalcast.storage.EncryptedFileSenderRegistry
 import com.universalcast.storage.LoadOutcome
@@ -42,6 +44,7 @@ class ReceiverRuntime(private val app: Context) {
     val registry: SenderRegistry
     val registryOutcome: LoadOutcome
     val engine = Media3PlaybackEngine(app)
+    val remoteDispatcher = TvRemoteDispatcher(app, engine)
 
     private val advertiser = NsdAdvertiser(app.getSystemService(Context.NSD_SERVICE) as NsdManager, log)
 
@@ -66,8 +69,11 @@ class ReceiverRuntime(private val app: Context) {
     val startError: StateFlow<String?> = _startError.asStateFlow()
     private val _name = MutableStateFlow(readName())
     val receiverName: StateFlow<String> = _name.asStateFlow()
+    private val _osdToast = MutableStateFlow<Pair<String, Long>?>(null)
+    val osdToast: StateFlow<Pair<String, Long>?> = _osdToast.asStateFlow()
 
     private val castDetector = CastStartDetector()
+    private val osdTracker = PlayerOsdTracker()
 
     /**
      * Invoked (on the playback-events thread) when a phone starts casting: IDLE → playing/loading with a media URI,
@@ -106,8 +112,13 @@ class ReceiverRuntime(private val app: Context) {
             }
         })
         core.addConnectionsListener { list -> _connected.value = list; refreshSenders() }
+        engine.applyInitialSubtitleStyle(settings.subtitleStyle.value)
+        engine.onSubtitleStyleChanged = { style -> settings.setSubtitleStyle(style) }
+        engine.onRemoteKeyReceived = { key -> remoteDispatcher.dispatch(key) }
+        remoteDispatcher.onKeyAction = { _, label -> if (label != null) showOsd(label) }
         engine.addListener { snap ->
             _playback.value = snap
+            osdTracker.onSnapshot(snap)?.let { showOsd(it) }
             if (castDetector.onSnapshot(snap)) runCatching { onCastStarted?.invoke() }.onFailure { log.warn("Auto-open failed: ${it.javaClass.simpleName}") }
         }
         refreshSenders()
@@ -155,6 +166,15 @@ class ReceiverRuntime(private val app: Context) {
         prefs.edit().putString("name", clean).apply()
         _name.value = clean
         if (core.isRunning) core.advertise() // advertise() is a no-op for identical ads; a new name restarts it
+    }
+
+    fun showOsd(text: String) {
+        _osdToast.value = text to System.currentTimeMillis()
+    }
+
+    fun updateSubtitleStyle(style: com.universalcast.playback.SubtitleStyle) {
+        settings.setSubtitleStyle(style)
+        engine.setSubtitleStyle(style)
     }
 
     private fun readName(): String =

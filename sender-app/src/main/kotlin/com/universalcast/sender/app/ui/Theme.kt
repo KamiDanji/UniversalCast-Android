@@ -23,6 +23,7 @@ object Palette {
     val Ok = Color(0xFF4CD08A)
     val Warn = Color(0xFFFFC857)
     val Danger = Color(0xFFFF6B6B)
+    val Outline = Color(0xFF28344A)
 }
 
 private val scheme = darkColorScheme(
