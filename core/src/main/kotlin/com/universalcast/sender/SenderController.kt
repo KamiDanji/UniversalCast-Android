@@ -1,12 +1,17 @@
 package com.universalcast.sender
 
 import com.universalcast.playback.MediaHeaders
+import com.universalcast.playback.MediaItemInfo
+import com.universalcast.playback.MediaTrack
 import com.universalcast.playback.MediaUriValidator
+import com.universalcast.playback.PlaybackQueue
+import com.universalcast.playback.SubtitleInfo
 import com.universalcast.playback.SubtitleValidator
 import com.universalcast.playback.PlaybackSnapshot
 import com.universalcast.playback.PlaybackStatus
 import com.universalcast.playback.RemoteKey
 import com.universalcast.playback.SubtitleStyle
+import com.universalcast.playback.TrackKind
 import com.universalcast.playback.VideoScaleMode
 import com.universalcast.security.SenderIdentity
 import com.universalcast.ucp.Envelope
@@ -43,6 +48,8 @@ data class SenderState(
     val snapshotReceivedAtMs: Long = 0,
     val failure: FailureKind? = null,
     val message: String? = null,
+    val isDummyMode: Boolean = false,
+    val dummyLastAction: String? = null,
 ) {
     val canControl: Boolean get() = phase == ConnectionPhase.CONNECTED && role == "CONTROLLER"
 
@@ -88,6 +95,8 @@ class SenderController(
     private var target: PairedReceiver? = null
     private var preferredHosts: List<String> = emptyList()
     private var wantConnected = false
+    private var dummyActive = false
+    private val dummyQueue = PlaybackQueue()
     private var heartbeat: ScheduledFuture<*>? = null
     private var reconnect: ScheduledFuture<*>? = null
 
@@ -101,8 +110,9 @@ class SenderController(
 
     /** Connects to [receiver]. [preferredHosts] (e.g. from mDNS) are tried before the stored addresses. */
     fun connect(receiver: PairedReceiver, preferredHosts: List<String> = emptyList()) {
-        update { it.copy(phase = ConnectionPhase.CONNECTING, receiver = receiver, failure = null, message = null) }
+        update { it.copy(phase = ConnectionPhase.CONNECTING, receiver = receiver, failure = null, message = null, isDummyMode = false, dummyLastAction = null) }
         submit {
+            dummyActive = false
             cancelReconnect()
             dropClient()
             target = receiver
@@ -112,11 +122,84 @@ class SenderController(
         }
     }
 
-    fun disconnect() = submit {
+    /**
+     * Activates Developer Dummy TV Mode: simulates a live connected TV receiver in-process so all Remote,
+     * Touchpad, D-Pad, Keyboard, Track Switching, Queue and Browser Cast features can be tested without a physical TV.
+     */
+    fun startDummyMode() = submit {
         wantConnected = false
         cancelReconnect()
         dropClient()
-        update { SenderState(phase = ConnectionPhase.DISCONNECTED, receiver = it.receiver) }
+        dummyActive = true
+        val now = clock()
+        val dummyReceiver = PairedReceiver(
+            fingerprint = "d".repeat(64),
+            deviceId = "dummy-dev-tv",
+            name = "Dummy TV (Dev Simulator)",
+            addresses = listOf("127.0.0.1"),
+            port = 8765,
+            path = Ucp.WS_PATH,
+            role = "CONTROLLER",
+            pairedAtMs = now,
+            lastConnectedAtMs = now,
+        )
+        dummyQueue.clear()
+        val ep1 = MediaItemInfo("https://demo.universalcast.local/ep1.m3u8", "application/x-mpegURL", "Episode 1 — Romance Dawn")
+        val ep2 = MediaItemInfo("https://demo.universalcast.local/ep2.m3u8", "application/x-mpegURL", "Episode 2 — Enter Zoro")
+        val ep3 = MediaItemInfo("https://demo.universalcast.local/ep3.m3u8", "application/x-mpegURL", "Episode 3 — Morgan vs. Luffy")
+        dummyQueue.add(ep1, playNext = false, startPositionMs = 0L, isCurrentlyIdle = true)
+        dummyQueue.add(ep2, playNext = false, startPositionMs = 0L, isCurrentlyIdle = false)
+        dummyQueue.add(ep3, playNext = false, startPositionMs = 0L, isCurrentlyIdle = false)
+        val (qList, qIdx) = dummyQueue.summaries()
+        val snap = PlaybackSnapshot(
+            status = PlaybackStatus.PLAYING,
+            mediaUri = ep1.uri,
+            title = ep1.title,
+            positionMs = 125_000L,
+            durationMs = 1_440_000L,
+            bufferedPositionMs = 480_000L,
+            isPlaying = true,
+            speed = 1.0f,
+            volume = 0.8f,
+            revision = 1L,
+            capturedAtMs = now,
+            audioTracks = listOf(
+                MediaTrack("a:0:0", TrackKind.AUDIO, "Japanese (Original · 2ch)", "ja", true),
+                MediaTrack("a:0:1", TrackKind.AUDIO, "English Dub (5.1ch)", "en", false),
+                MediaTrack("a:0:2", TrackKind.AUDIO, "Director Commentary", "en", false),
+            ),
+            subtitleTracks = listOf(
+                MediaTrack("s:0:0", TrackKind.SUBTITLE, "English", "en", true),
+                MediaTrack("s:0:1", TrackKind.SUBTITLE, "Dutch (Nederlands)", "nl", false),
+                MediaTrack("s:0:2", TrackKind.SUBTITLE, "Spanish (Español)", "es", false),
+            ),
+            subtitlesEnabled = true,
+            queue = qList,
+            queueIndex = qIdx,
+            mediaKind = "VIDEO",
+        )
+        target = dummyReceiver
+        update {
+            SenderState(
+                phase = ConnectionPhase.CONNECTED,
+                receiver = dummyReceiver,
+                role = "CONTROLLER",
+                hasSession = true,
+                snapshot = snap,
+                snapshotReceivedAtMs = now,
+                isDummyMode = true,
+                dummyLastAction = "📺 Dummy TV Simulator ready — test any control or gesture!",
+            )
+        }
+    }
+
+    fun disconnect() = submit {
+        wantConnected = false
+        dummyActive = false
+        dummyQueue.clear()
+        cancelReconnect()
+        dropClient()
+        update { SenderState(phase = ConnectionPhase.DISCONNECTED, receiver = it.receiver?.takeIf { r -> r.deviceId != "dummy-dev-tv" }) }
     }
 
     fun shutdown() {
@@ -422,6 +505,10 @@ class SenderController(
     }
 
     private fun control(method: String, payload: Map<String, Any?> = emptyMap()) = submit {
+        if (dummyActive && state.isDummyMode) {
+            handleDummyControl(method, payload)
+            return@submit
+        }
         val c = client
         if (c == null || state.phase != ConnectionPhase.CONNECTED) {
             note(if (state.phase == ConnectionPhase.RECONNECTING) RECONNECTING_MESSAGE else "Not connected to a TV.")
@@ -443,6 +530,236 @@ class SenderController(
             }
         } catch (e: UcpClientException) {
             if (e.connectionLost) connectionLost(c) else note(describe(e.code, e.message))
+        }
+    }
+
+    private fun handleDummyControl(method: String, payload: Map<String, Any?>) {
+        val now = clock()
+        val cur = state.snapshot
+        val posNow = state.estimatedPositionMs(now)
+        var actionText = "📺 TV executed $method"
+        var nextSnap = cur.copy(positionMs = posNow, revision = cur.revision + 1, capturedAtMs = now)
+
+        fun loadDummyItem(item: MediaItemInfo, autoplay: Boolean, startPos: Long) {
+            val (qList, qIdx) = dummyQueue.summaries()
+            val subTracks = if (item.subtitles.isNotEmpty()) {
+                item.subtitles.mapIndexed { idx, s ->
+                    MediaTrack("s:0:$idx", TrackKind.SUBTITLE, s.label ?: s.language ?: "Subtitle ${idx + 1}", s.language, idx == 0)
+                }
+            } else cur.subtitleTracks
+            nextSnap = nextSnap.copy(
+                status = if (autoplay) PlaybackStatus.PLAYING else PlaybackStatus.READY,
+                mediaUri = item.uri,
+                title = item.title ?: item.uri.substringAfterLast('/'),
+                positionMs = startPos,
+                durationMs = 1_440_000L,
+                bufferedPositionMs = (startPos + 300_000L).coerceAtMost(1_440_000L),
+                isPlaying = autoplay,
+                subtitleTracks = subTracks,
+                subtitlesEnabled = subTracks.isNotEmpty(),
+                queue = qList,
+                queueIndex = qIdx,
+                error = null,
+            )
+        }
+
+        when (method) {
+            Method.MEDIA_LOAD -> {
+                val uri = payload["uri"] as? String ?: "https://demo.universalcast.local/video.mp4"
+                val title = payload["title"] as? String
+                val mime = payload["mimeType"] as? String
+                val autoplay = (payload["autoplay"] as? Boolean) ?: true
+                val start = (payload["startPositionMs"] as? Long) ?: 0L
+                val item = MediaItemInfo(uri, mime, title)
+                dummyQueue.onDirectLoad(item, start)
+                loadDummyItem(item, autoplay, start)
+                actionText = "📺 TV loaded: ${title ?: uri.take(36)}"
+            }
+            Method.PLAYBACK_PLAY, Method.PLAYBACK_RESUME -> {
+                nextSnap = nextSnap.copy(status = PlaybackStatus.PLAYING, isPlaying = true)
+                actionText = "📺 TV: ▶ Playing"
+            }
+            Method.PLAYBACK_PAUSE -> {
+                nextSnap = nextSnap.copy(status = PlaybackStatus.PAUSED, isPlaying = false)
+                actionText = "📺 TV: ⏸ Paused at ${posNow / 1000}s"
+            }
+            Method.PLAYBACK_STOP -> {
+                dummyQueue.clear()
+                nextSnap = PlaybackSnapshot(
+                    status = PlaybackStatus.IDLE,
+                    speed = cur.speed,
+                    volume = cur.volume,
+                    revision = cur.revision + 1,
+                    capturedAtMs = now,
+                    subtitleStyle = cur.subtitleStyle,
+                    videoScale = cur.videoScale,
+                )
+                actionText = "📺 TV: ⏹ Stopped playback"
+            }
+            Method.PLAYBACK_SEEK -> {
+                val targetPos = ((payload["positionMs"] as? Long) ?: 0L).coerceIn(0L, cur.durationMs ?: Long.MAX_VALUE)
+                nextSnap = nextSnap.copy(positionMs = targetPos)
+                actionText = "📺 TV Seek → ${targetPos / 1000}s"
+            }
+            Method.PLAYBACK_SET_SPEED -> {
+                val sp = ((payload["speed"] as? Number)?.toFloat() ?: 1.0f).coerceIn(0.25f, 4.0f)
+                nextSnap = nextSnap.copy(speed = sp)
+                actionText = "📺 TV Speed → ${sp}×"
+            }
+            Method.PLAYBACK_SET_VOLUME -> {
+                val vol = ((payload["volume"] as? Number)?.toFloat() ?: 1.0f).coerceIn(0f, 1f)
+                nextSnap = nextSnap.copy(volume = vol)
+                actionText = "📺 TV Volume → ${(vol * 100).toInt()}%"
+            }
+            Method.PLAYBACK_SELECT_TRACKS -> {
+                val audioId = payload["audioTrackId"] as? String
+                val subId = payload["subtitleTrackId"] as? String
+                val nextAudio = if (audioId != null) cur.audioTracks.map { it.copy(selected = it.id == audioId) } else cur.audioTracks
+                val subsOff = subId.equals("off", ignoreCase = true)
+                val nextSubs = when {
+                    subsOff -> cur.subtitleTracks.map { it.copy(selected = false) }
+                    subId != null -> cur.subtitleTracks.map { it.copy(selected = it.id == subId) }
+                    else -> cur.subtitleTracks
+                }
+                val enabled = when {
+                    subsOff -> false
+                    subId != null -> nextSubs.any { it.selected }
+                    else -> cur.subtitlesEnabled
+                }
+                nextSnap = nextSnap.copy(audioTracks = nextAudio, subtitleTracks = nextSubs, subtitlesEnabled = enabled)
+                val chosenLabel = if (audioId != null) nextAudio.firstOrNull { it.selected }?.label else if (subsOff) "Subtitles Off" else nextSubs.firstOrNull { it.selected }?.label
+                actionText = "📺 TV Track → ${chosenLabel ?: "Updated"}"
+            }
+            Method.PLAYBACK_SET_SUBTITLE_OFFSET -> {
+                val off = (payload["offsetMs"] as? Long) ?: 0L
+                nextSnap = nextSnap.copy(subtitleOffsetMs = off)
+                actionText = "📺 TV Subtitle Delay → ${if (off > 0) "+" else ""}${off / 1000.0}s"
+            }
+            Method.PLAYBACK_SET_SUBTITLE_STYLE -> {
+                val style = SubtitleStyle.fromJson(Fields(payload))
+                nextSnap = nextSnap.copy(subtitleStyle = style)
+                actionText = "📺 TV Subtitle Style → Scale ${style.fontScale}×, Bg ${(style.backgroundOpacity * 100).toInt()}%"
+            }
+            Method.PLAYBACK_SET_VIDEO_SCALE -> {
+                val sc = (payload["scale"] as? String)?.let { VideoScaleMode.fromWire(it) } ?: VideoScaleMode.FIT
+                nextSnap = nextSnap.copy(videoScale = sc)
+                actionText = "📺 TV Aspect Ratio → ${sc.name}"
+            }
+            Method.PLAYBACK_SET_SLEEP_TIMER -> {
+                val dur = (payload["durationMs"] as? Long) ?: 0L
+                nextSnap = nextSnap.copy(sleepTimerRemainingMs = dur.takeIf { it > 0 })
+                actionText = if (dur > 0) "📺 TV Sleep Timer → ${dur / 60_000L} min" else "📺 TV Sleep Timer → Off"
+            }
+            Method.QUEUE_ADD -> {
+                val uri = payload["uri"] as? String ?: "https://demo.universalcast.local/item.mp4"
+                val title = payload["title"] as? String
+                val mime = payload["mimeType"] as? String
+                val playNext = (payload["playNext"] as? Boolean) ?: false
+                val start = (payload["startPositionMs"] as? Long) ?: 0L
+                val item = MediaItemInfo(uri, mime, title)
+                val immediate = dummyQueue.add(item, playNext, start, cur.status == PlaybackStatus.IDLE)
+                if (immediate != null) {
+                    loadDummyItem(immediate.item, autoplay = true, startPos = start)
+                } else {
+                    val (qList, qIdx) = dummyQueue.summaries()
+                    nextSnap = nextSnap.copy(queue = qList, queueIndex = qIdx)
+                }
+                actionText = "📺 TV Queue + ${title ?: uri.take(30)}"
+            }
+            Method.QUEUE_REMOVE -> {
+                val id = payload["itemId"] as? String ?: ""
+                dummyQueue.remove(id)
+                val (qList, qIdx) = dummyQueue.summaries()
+                nextSnap = nextSnap.copy(queue = qList, queueIndex = qIdx)
+                actionText = "📺 TV Queue removed item"
+            }
+            Method.QUEUE_REORDER -> {
+                val id = payload["itemId"] as? String ?: ""
+                val toIdx = ((payload["toIndex"] as? Long) ?: 0L).toInt()
+                dummyQueue.move(id, toIdx)
+                val (qList, qIdx) = dummyQueue.summaries()
+                nextSnap = nextSnap.copy(queue = qList, queueIndex = qIdx)
+                actionText = "📺 TV Queue reordered"
+            }
+            Method.QUEUE_CLEAR -> {
+                dummyQueue.clear()
+                nextSnap = nextSnap.copy(queue = emptyList(), queueIndex = -1)
+                actionText = "📺 TV Queue cleared"
+            }
+            Method.QUEUE_NEXT -> {
+                val next = dummyQueue.next()
+                if (next != null) {
+                    loadDummyItem(next.item, autoplay = true, startPos = next.startPositionMs)
+                    actionText = "📺 TV Skipped Next → ${next.item.title ?: next.item.uri}"
+                }
+            }
+            Method.QUEUE_PREVIOUS -> {
+                val prev = dummyQueue.previous()
+                if (prev != null) {
+                    loadDummyItem(prev.item, autoplay = true, startPos = prev.startPositionMs)
+                    actionText = "📺 TV Skipped Previous → ${prev.item.title ?: prev.item.uri}"
+                }
+            }
+            Method.QUEUE_JUMP -> {
+                val id = payload["itemId"] as? String ?: ""
+                val target = dummyQueue.jumpTo(id)
+                if (target != null) {
+                    loadDummyItem(target.item, autoplay = true, startPos = target.startPositionMs)
+                    actionText = "📺 TV Jumped to → ${target.item.title ?: target.item.uri}"
+                }
+            }
+            Method.REMOTE_KEY -> {
+                val keyName = payload["key"] as? String ?: ""
+                val key = RemoteKey.fromWire(keyName)
+                when (key) {
+                    RemoteKey.PLAY_PAUSE -> {
+                        val playing = !cur.isPlaying
+                        nextSnap = nextSnap.copy(status = if (playing) PlaybackStatus.PLAYING else PlaybackStatus.PAUSED, isPlaying = playing)
+                        actionText = "📺 TV Remote Key: PLAY_PAUSE (${if (playing) "Playing" else "Paused"})"
+                    }
+                    RemoteKey.REWIND -> {
+                        val p = (posNow - 10_000L).coerceAtLeast(0L)
+                        nextSnap = nextSnap.copy(positionMs = p)
+                        actionText = "📺 TV Remote Key: ⏪ REWIND (−10s → ${p / 1000}s)"
+                    }
+                    RemoteKey.FAST_FORWARD -> {
+                        val p = (posNow + 10_000L).coerceAtMost(cur.durationMs ?: Long.MAX_VALUE)
+                        nextSnap = nextSnap.copy(positionMs = p)
+                        actionText = "📺 TV Remote Key: ⏩ FAST_FORWARD (+10s → ${p / 1000}s)"
+                    }
+                    RemoteKey.VOLUME_UP -> {
+                        val v = (cur.volume + 0.08f).coerceIn(0f, 1f)
+                        nextSnap = nextSnap.copy(volume = v)
+                        actionText = "📺 TV Remote Key: 🔊 VOLUME_UP (${(v * 100).toInt()}%)"
+                    }
+                    RemoteKey.VOLUME_DOWN -> {
+                        val v = (cur.volume - 0.08f).coerceIn(0f, 1f)
+                        nextSnap = nextSnap.copy(volume = v)
+                        actionText = "📺 TV Remote Key: 🔉 VOLUME_DOWN (${(v * 100).toInt()}%)"
+                    }
+                    RemoteKey.MUTE -> {
+                        val v = if (cur.volume > 0.01f) 0f else 0.8f
+                        nextSnap = nextSnap.copy(volume = v)
+                        actionText = "📺 TV Remote Key: 🔇 MUTE (${if (v == 0f) "Muted" else "Unmuted"})"
+                    }
+                    else -> {
+                        actionText = "📺 TV Remote Key: ${key?.name ?: keyName}"
+                    }
+                }
+            }
+            Method.REMOTE_TEXT -> {
+                val text = payload["text"] as? String ?: ""
+                val submit = payload["submit"] == true
+                actionText = "📺 TV Keyboard Input: \"$text\"${if (submit) " [Enter]" else ""}"
+            }
+        }
+        update { st ->
+            st.copy(
+                snapshot = nextSnap,
+                snapshotReceivedAtMs = now,
+                message = null,
+                dummyLastAction = actionText,
+            )
         }
     }
 

@@ -50,4 +50,34 @@ class ReleaseTest {
         assertFalse(TrustedHosts.allowed("github.com.evil.io"))
         assertFalse(TrustedHosts.allowed(null))
     }
+
+    @Test fun parsesReleaseNotesMarkdownBlocksAndInlines() {
+        val md = """
+            ## What's New in 1.0.7
+            - **Real-Time Sync:** Shifts `TextRenderer` by *offset*.
+              - Nested bullet with [link](https://example.org)
+            1. First numbered item
+            ---
+            ```
+            ./gradlew assembleRelease
+            ```
+        """.trimIndent()
+        val blocks = MarkdownParser.parse(md)
+        assertEquals(6, blocks.size)
+        val h = assertIs<MarkdownBlock.Heading>(blocks[0])
+        assertEquals(2, h.level)
+        val b1 = assertIs<MarkdownBlock.ListItem>(blocks[1])
+        assertEquals(0, b1.indentLevel)
+        assertTrue(b1.spans.any { it is MarkdownSpan.Bold && it.text == "Real-Time Sync:" })
+        assertTrue(b1.spans.any { it is MarkdownSpan.Code && it.text == "TextRenderer" })
+        assertTrue(b1.spans.any { it is MarkdownSpan.Italic && it.text == "offset" })
+        val b2 = assertIs<MarkdownBlock.ListItem>(blocks[2])
+        assertTrue(b2.indentLevel > 0)
+        assertTrue(b2.spans.any { it is MarkdownSpan.Link && it.label == "link" })
+        val num = assertIs<MarkdownBlock.ListItem>(blocks[3])
+        assertEquals("1.", num.bullet)
+        assertIs<MarkdownBlock.Divider>(blocks[4])
+        val code = assertIs<MarkdownBlock.CodeBlock>(blocks[5])
+        assertEquals("./gradlew assembleRelease", code.code)
+    }
 }

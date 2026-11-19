@@ -1,21 +1,33 @@
 package com.universalcast.sender.app.ui
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.universalcast.updater.MarkdownBlock
+import com.universalcast.updater.MarkdownParser
+import com.universalcast.updater.MarkdownSpan
 import com.universalcast.updater.UpdateManager
 import com.universalcast.updater.UpdateState
 
@@ -33,9 +45,16 @@ fun UpdatePrompt(updates: UpdateManager) {
             onDismissRequest = updates::dismiss,
             title = { Text("Update available: ${s.release.version}") },
             text = {
-                Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
-                    Text("You have ${updates.currentVersion}. The new version downloads from GitHub and Android asks you to confirm the install.", color = Palette.TextDim)
-                    if (s.release.notes.isNotEmpty()) { Spacer(Modifier.height(12.dp)); Text(s.release.notes) }
+                Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) {
+                    Text(
+                        "You have ${updates.currentVersion}. The new version downloads from GitHub and Android asks you to confirm the install.",
+                        color = Palette.TextDim,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (s.release.notes.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        MarkdownReleaseNotes(s.release.notes)
+                    }
                 }
             },
             confirmButton = { TextButton(onClick = updates::install) { Text("Update now") } },
@@ -67,6 +86,90 @@ fun UpdatePrompt(updates: UpdateManager) {
             confirmButton = { if (s.release != null) TextButton(onClick = updates::install) { Text("Retry") } },
             dismissButton = { TextButton(onClick = updates::dismiss) { Text("Close") } },
         )
+    }
+}
+
+@Composable
+fun MarkdownReleaseNotes(markdown: String, modifier: Modifier = Modifier) {
+    val blocks = remember(markdown) { MarkdownParser.parse(markdown) }
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (b in blocks) {
+            when (b) {
+                is MarkdownBlock.Heading -> {
+                    val style = when (b.level) {
+                        1 -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        2 -> MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                        else -> MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+                    }
+                    val color = if (b.level <= 2) Palette.Accent else Palette.Text
+                    Spacer(Modifier.height(2.dp))
+                    Text(text = renderSpans(b.spans), style = style, color = color)
+                }
+                is MarkdownBlock.ListItem -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = (b.indentLevel * 12).dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(b.bullet, color = Palette.Accent, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = renderSpans(b.spans),
+                            color = Palette.Text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                is MarkdownBlock.CodeBlock -> {
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(Palette.SurfaceHigh, RoundedCornerShape(10.dp))
+                            .padding(10.dp),
+                    ) {
+                        Text(
+                            text = b.code,
+                            color = Palette.Text,
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                MarkdownBlock.Divider -> {
+                    HorizontalDivider(color = Palette.Outline, modifier = Modifier.padding(vertical = 4.dp))
+                }
+                is MarkdownBlock.Paragraph -> {
+                    Text(
+                        text = renderSpans(b.spans),
+                        color = Palette.Text,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun renderSpans(spans: List<MarkdownSpan>): AnnotatedString = buildAnnotatedString {
+    for (s in spans) {
+        when (s) {
+            is MarkdownSpan.Plain -> append(s.text)
+            is MarkdownSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = Palette.Text)) { append(s.text) }
+            is MarkdownSpan.Italic -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(s.text) }
+            is MarkdownSpan.Code -> withStyle(
+                SpanStyle(
+                    fontFamily = FontFamily.Monospace,
+                    color = Palette.Accent,
+                    background = Palette.SurfaceHigh,
+                )
+            ) { append(" ${s.text} ") }
+            is MarkdownSpan.Link -> withStyle(
+                SpanStyle(
+                    color = Palette.Accent,
+                    textDecoration = TextDecoration.Underline,
+                    fontWeight = FontWeight.Medium,
+                )
+            ) { append(s.label) }
+        }
     }
 }
 

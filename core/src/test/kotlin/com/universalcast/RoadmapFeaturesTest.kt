@@ -307,4 +307,40 @@ class RoadmapFeaturesTest {
         assertFalse(bookmarks.toggle("https://onepace.co", "One Pace"))
         assertTrue(BookmarkStore(bmFile).all().isEmpty())
     }
+
+    // ---- 6. Developer Dummy TV Simulator Mode ------------------------------------------------------------
+
+    @Test fun dummyTvSimulatorConnectsWithoutNetworkAndExecutesAllControls() {
+        val ctl = SenderController(SoftwareSenderIdentity.generate())
+        try {
+            ctl.startDummyMode()
+            waitFor { ctl.state.phase == ConnectionPhase.CONNECTED && ctl.state.isDummyMode }
+            assertEquals("CONTROLLER", ctl.state.role)
+            assertTrue(ctl.state.canControl)
+            assertEquals(3, ctl.state.snapshot.queue.size)
+            assertEquals(3, ctl.state.snapshot.audioTracks.size)
+            assertEquals(3, ctl.state.snapshot.subtitleTracks.size)
+
+            ctl.pause()
+            waitFor { ctl.state.snapshot.status == PlaybackStatus.PAUSED }
+            ctl.selectTracks(audioTrackId = "a:0:1", subtitleTrackId = "s:0:2")
+            waitFor {
+                ctl.state.snapshot.audioTracks.firstOrNull { it.selected }?.id == "a:0:1" &&
+                    ctl.state.snapshot.subtitleTracks.firstOrNull { it.selected }?.id == "s:0:2"
+            }
+            ctl.setVideoScale(VideoScaleMode.ZOOM)
+            waitFor { ctl.state.snapshot.videoScale == VideoScaleMode.ZOOM }
+            ctl.remoteKey(RemoteKey.UP)
+            waitFor { ctl.state.dummyLastAction?.contains("UP") == true }
+            ctl.remoteText("One Pace", submit = true)
+            waitFor { ctl.state.dummyLastAction?.contains("One Pace") == true }
+            ctl.queueNext()
+            waitFor { ctl.state.snapshot.queueIndex == 1 }
+
+            ctl.disconnect()
+            waitFor { ctl.state.phase == ConnectionPhase.DISCONNECTED && !ctl.state.isDummyMode }
+        } finally {
+            ctl.shutdown()
+        }
+    }
 }

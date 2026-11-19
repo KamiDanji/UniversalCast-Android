@@ -18,7 +18,7 @@ import com.universalcast.sender.app.Links
 import com.universalcast.sender.app.SenderApp
 import com.universalcast.sender.app.web.BrowserScreen
 
-private enum class Screen { HOME, PAIR, REMOTE, BROWSER }
+private enum class Screen { HOME, PAIR, REMOTE, BROWSER, ABOUT }
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
@@ -44,11 +44,18 @@ class MainActivity : ComponentActivity() {
                     label = "screen",
                 ) { target ->
                 when (target) {
-                    Screen.HOME -> HomeScreen(vm, onPair = { screen = Screen.PAIR }, onOpenRemote = { screen = Screen.REMOTE }, onBrowse = { screen = Screen.BROWSER })
+                    Screen.HOME -> HomeScreen(
+                        vm,
+                        onPair = { screen = Screen.PAIR },
+                        onOpenRemote = { screen = Screen.REMOTE },
+                        onBrowse = { screen = Screen.BROWSER },
+                        onAbout = { screen = Screen.ABOUT },
+                    )
                     Screen.PAIR -> PairScreen(vm) { screen = Screen.HOME }
                     Screen.REMOTE -> RemoteScreen(vm, onClose = { screen = Screen.HOME }, onPairAgain = { screen = Screen.PAIR }, onBrowse = { screen = Screen.BROWSER })
                     // The browser shows the remote as an overlay itself, so the page stays loaded underneath.
                     Screen.BROWSER -> BrowserScreen(vm, onClose = { screen = Screen.HOME }, onPairAgain = { screen = Screen.PAIR })
+                    Screen.ABOUT -> AboutScreen(vm, onBack = { screen = Screen.HOME }, onOpenDummyRemote = { screen = Screen.REMOTE })
                 }
                 }
                 var splash by rememberSaveable { mutableStateOf(true) }

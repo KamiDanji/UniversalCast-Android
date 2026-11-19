@@ -42,6 +42,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     /** Set when a shared web page should open the browser straight away. */
     val openBrowserRequest = MutableStateFlow(false)
 
+    /** Unlocked by spam-tapping the version number on the About screen. */
+    val devModeUnlocked = MutableStateFlow(false)
+
     private val _stage = MutableStateFlow<PairStage>(PairStage.Idle)
     val stage: StateFlow<PairStage> = _stage.asStateFlow()
     private var session: PairingSession? = null

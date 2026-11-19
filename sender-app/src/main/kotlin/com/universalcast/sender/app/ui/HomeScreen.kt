@@ -17,7 +17,13 @@ import com.universalcast.sender.PairedReceiver
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, onBrowse: () -> Unit) {
+fun HomeScreen(
+    vm: AppViewModel,
+    onPair: () -> Unit,
+    onOpenRemote: () -> Unit,
+    onBrowse: () -> Unit,
+    onAbout: () -> Unit = {},
+) {
     val rt = vm.rt
     val receivers by rt.receivers.collectAsState()
     val nearby by rt.discovery.tvs.collectAsState()
@@ -42,6 +48,7 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, o
                         IconButton(onClick = { appMenu = true }) { Icon(Icons.Default.MoreVert, "Menu", tint = Palette.TextDim) }
                         DropdownMenu(expanded = appMenu, onDismissRequest = { appMenu = false }) {
                             DropdownMenuItem(text = { Text("Check for updates (v${updates.currentVersion})") }, onClick = { appMenu = false; updates.checkNow() })
+                            DropdownMenuItem(text = { Text("About UniversalCast") }, onClick = { appMenu = false; onAbout() })
                         }
                     }
                 },
@@ -80,8 +87,21 @@ fun HomeScreen(vm: AppViewModel, onPair: () -> Unit, onOpenRemote: () -> Unit, o
             if (state.phase == ConnectionPhase.CONNECTED || state.phase == ConnectionPhase.RECONNECTING) {
                 item {
                     Panel {
-                        Text(if (state.phase == ConnectionPhase.CONNECTED) "Connected to ${state.receiver?.name}" else "Reconnecting to ${state.receiver?.name}…", color = Palette.Ok, style = MaterialTheme.typography.titleSmall)
-                        Button(onClick = onOpenRemote) { Text("Open remote") }
+                        Text(
+                            if (state.isDummyMode) "Connected to Dummy TV (Dev Simulator)"
+                            else if (state.phase == ConnectionPhase.CONNECTED) "Connected to ${state.receiver?.name}"
+                            else "Reconnecting to ${state.receiver?.name}…",
+                            color = Palette.Ok,
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = onOpenRemote) { Text("Open remote") }
+                            if (state.isDummyMode) {
+                                OutlinedButton(onClick = { rt.controller.disconnect() }) {
+                                    Text("Exit Dummy Mode", color = Palette.Danger)
+                                }
+                            }
+                        }
                     }
                 }
             }

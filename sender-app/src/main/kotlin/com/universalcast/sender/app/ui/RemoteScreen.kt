@@ -127,6 +127,22 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
             }
 
             if (st.phase == ConnectionPhase.CONNECTED) {
+                if (st.isDummyMode) {
+                    Panel {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Chip("Dev Mode · Dummy TV Simulator", Palette.Ok, live = true)
+                            TextButton(onClick = { rt.controller.disconnect(); onClose() }) {
+                                Text("Exit", color = Palette.Danger)
+                            }
+                        }
+                        Text(
+                            text = st.dummyLastAction ?: "📺 Simulated TV ready",
+                            color = Palette.Text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                }
                 // --- top mode switcher: Media & Cast vs. Google TV-style Remote ------------------------
                 Row(
                     Modifier
