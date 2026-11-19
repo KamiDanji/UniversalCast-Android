@@ -2,9 +2,9 @@
 
 Verified at version **1.2.1** (`versionCode=15`).
 
-Command (Windows, JDK 17, Gradle 8.7, `--rerun-tasks`):
+Command (Windows, JDK 21, Gradle 9.7.1, AGP 9.1.1, Kotlin 2.3.21, `--rerun-tasks`):
 `.\gradlew.bat :core:test :app:testDebugUnitTest :sender-app:testDebugUnitTest :updater:testDebugUnitTest --rerun-tasks`
-→ **BUILD SUCCESSFUL** (75 executed tasks, as of 1.0.10; for 1.1.0 the `:sender-app` and `:app` unit tests were re-run, including the new `ThemeTest`). Release builds also compiled and packaged cleanly via `.\gradlew.bat assembleRelease`.
+→ **BUILD SUCCESSFUL** (all 247 tests re-run after the 1.2.0 toolchain upgrade and again for 1.2.1). Release builds also compiled and packaged cleanly via `.\gradlew.bat assembleRelease`.
 
 | Module | Tests | Failures | Errors | Skipped |
 |---|---|---|---|---|
@@ -46,3 +46,9 @@ Command (Windows, JDK 17, Gradle 8.7, `--rerun-tasks`):
 
 ## Not run
 `:app:connectedDebugAndroidTest` / `:sender-app:connectedDebugAndroidTest` (need a connected Android device); no physical TV or phone runtime verification in this pass.
+
+## Emulator smoke tests (1.2.0 / 1.2.1)
+Run on a Pixel 8 virtual device (API 36) and an Android TV 1080p virtual device; not a substitute for the device checklist in `FEATURE_REPORT.md`.
+- Phone debug + signed **release (R8-minified)** build: launch, splash, Home, Appearance sheet (modes, colour themes, Pure black), About, Dummy-TV remote (playback controls, tracks, queue), light/dark mode: no crashes in logcat.
+- TV debug + signed release build: launch, splash, Home, pairing QR, Settings: no crashes; D-pad navigation worked.
+- Not exercised: camera QR scan, real phone-to-TV casting, Media3 playback of real streams, in-place self-update.

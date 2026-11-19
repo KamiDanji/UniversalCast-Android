@@ -77,12 +77,13 @@ Use debug builds (`com.universalcast.receiver.debug`, `com.universalcast.sender.
 27. Home `⋮ → About UniversalCast`: verify stats; tap the **Version** card 5 times to unlock and open **Dummy TV Simulator**; verify touchpad, D-pad, keyboard, tracks, queue, and scale controls respond in the simulator banner.
 28. On a signed release build older than the latest GitHub release: trigger *Check for updates*, verify release notes render formatted Markdown (headings, bullets, bold, inline code), and complete the OTA APK install.
 
-**Material 3 Expressive / TV Material redesign (1.1.0 → 1.2.0) — checked on emulators only, not on real hardware**
+**Material 3 Expressive / TV Material redesign (1.1.0 → 1.2.1) — phone confirmed by the owner on a real phone; TV checked on an emulator only**
 29. Phone, Android 12+: Home → palette icon → *Appearance*: *Wallpaper* follows the wallpaper (change wallpaper, reopen: colours change); Ocean/Violet/Lagoon/Forest/Rose/Sunset recolour the whole app; Light/Dark/System switch immediately and system-bar icons stay readable. On Android 8–11 *Wallpaper* is not offered.
 30. Phone cold start: system splash (logo on neutral background) hands over to the animated splash in the active theme colours; tapping the splash skips it. Themed launcher icon appears on Android 13+ when "Themed icons" is on.
 31. Phone *Pair a TV*: the QR scanner opens immediately; backing out shows Scan / Enter code manually; after pairing, *Connect & open remote* lands on the remote. Tapping a TV card (or a "Found nearby" card) connects / opens the scanner in one tap.
 32. Phone Remote: tab row (Media & Cast / TV Remote); with nothing playing the transport card is hidden and the cast options are first; with media playing the icon transport (back 10 s, play/pause, forward 10 s, previous/next) works.
 33. TV: D-pad focus on every button shows the TV Material focus (scale + inverted colours); settings toggles are switches (one OK press toggles); dialogs (revoke, rename, update) focus their first button; pairing focuses *Codes match* / *Approve* automatically; splash is skipped by any key.
+34. Phone *Appearance*: the *Expressive* theme and the Light/Dark/System modes apply immediately; **Pure black (OLED)** turns the dark-mode background and base surfaces to true black (cards stay slightly lighter) with any colour theme, including Wallpaper.
 
 ## Known limits (stated in the UI/docs)
 - DRM (Widevine/FairPlay/PlayReady, SAMPLE-AES) can't be cast by any method here.

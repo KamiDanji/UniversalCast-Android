@@ -1,7 +1,8 @@
 # Building
 
 ## Requirements
-- JDK 17, Android SDK (platform 34, build-tools 34.x). Android Studio Koala/Ladybug or newer works.
+- JDK 17 or newer (built and tested with JDK 21), Android SDK **platform 37** (`compileSdk 37`) and a current build-tools release.
+- Toolchain: Gradle 9.7.1 (wrapper), Android Gradle Plugin 9.1.1, Kotlin 2.3.21 with the Compose compiler plugin, Compose BOM 2026.11.01 (Material 3 1.5.0), TV Material 1.1.0. Use a recent Android Studio (one that supports AGP 9.1).
 - Set `sdk.dir` in `local.properties` (Android Studio does this automatically).
 - Internet access for Gradle (Google Maven + Maven Central).
 
@@ -15,16 +16,16 @@
 ./gradlew :app:assembleDebug              # TV receiver debug APK (applicationId …receiver.debug, mode=development)
 ./gradlew :sender-app:assembleDebug       # phone app debug APK (applicationId com.universalcast.sender.debug)
 ./gradlew assembleRelease                 # both release APKs, minified, mode=production (signed when keystore.properties exists)
-./gradlew :app:connectedDebugAndroidTest  # Keystore tests on a device/emulator (API 23+)
+./gradlew :app:connectedDebugAndroidTest  # Keystore tests on a device/emulator (API 24+)
 ```
 Open the project folder in Android Studio and pick the `app` run configuration to install on an Android TV
-device/emulator (API 23+, Android TV system image).
+device/emulator (API 24+, Android TV system image).
 
 ## Installing
 - TV: `adb connect <tv-ip>:5555` then `adb install app/build/outputs/apk/debug/app-debug.apk` (enable developer options + network debugging on the TV).
 - Phone: `adb install sender-app/build/outputs/apk/debug/sender-app-debug.apk`, or copy the APK to the phone.
 - Phone and TV must be on the same Wi-Fi (client isolation / "guest network" breaks discovery and connections).
-- Phone app needs Android 8.0 (API 26)+; it asks for the camera only when you scan a QR code.
+- TV app needs Android 7.0 (API 24)+ (raised from 6.0 in 1.2.0). Phone app needs Android 8.0 (API 26)+; it asks for the camera only when you scan a QR code.
 
 ## Signing the release build
 In-place updates only work if every release is signed with the **same key**. Create one once and keep it safe
@@ -47,7 +48,7 @@ Debug builds never update (different applicationId).
 
 1. Bump `uc.versionName` (e.g. `1.2.1`) and `uc.versionCode` (+1, e.g. `15`) in `gradle.properties`. Both apps share them.
 2. `./gradlew assembleRelease` with `keystore.properties` in place (current version: `1.2.1`, `versionCode=15`).
-3. Create a GitHub release tagged `v<versionName>` (e.g. `v1.0.10`, not a draft or pre-release) and attach the two APKs,
+3. Create a GitHub release tagged `v<versionName>` (e.g. `v1.2.1`, not a draft or pre-release) and attach the two APKs,
    renamed so the names start with:
    - `universalcast-receiver` (from `app/build/outputs/apk/release/app-release.apk`), e.g. `universalcast-receiver-1.2.1.apk`
    - `universalcast-sender` (from `sender-app/build/outputs/apk/release/sender-app-release.apk`), e.g. `universalcast-sender-1.2.1.apk`
@@ -153,3 +154,8 @@ Two notes for your real TV:
 ```
 `:app:connectedDebugAndroidTest` / `:sender-app:connectedDebugAndroidTest` (Keystore tests) need a connected device.
 
+## Emulator testing
+Use virtual devices only (Device Manager), never a personal phone/TV that carries a release install: a phone image such as
+`system-images;android-36;google_apis;x86_64` (e.g. Pixel 8) and the Android TV 1080p image. Debug builds use the
+`.debug` application-id suffix; release builds are signed with the release key, so an emulator that already has a
+differently signed `com.universalcast.*` install must uninstall it first.

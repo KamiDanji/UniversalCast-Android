@@ -34,6 +34,7 @@ What still needs a device is listed in `reports/FEATURE_REPORT.md` with a manual
 - Root docs – `README.md`, `BUILD.md`, `SECURITY.md`, `ARCHITECTURE.md`.
 
 ## Phone app features
+- **Material 3 Expressive look** with **Wallpaper (dynamic) colours** on Android 12+, an Expressive baseline theme and six colour themes (Ocean, Violet, Lagoon, Forest, Rose, Sunset); Light / Dark / System mode and a **Pure black (OLED)** option, all in the *Appearance* sheet (palette icon on Home). Animated splash, themed launcher icon.
 - Pair by scanning the TV's QR code (or paste the code), compare the 6-digit code, wait for the TV user's approval.
 - Paired TVs are remembered (encrypted); each connection is pinned to the TV's key, whatever IP it has.
 - Finds TVs on the Wi-Fi via mDNS and uses their current address; falls back to the remembered addresses.

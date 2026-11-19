@@ -1,9 +1,8 @@
 # Known limitations
 
-1. The Android layers (`:app`, `:sender-app`, `:updater`) compile and their pure logic is unit-tested, but nothing was
-   run on an emulator, TV or phone in this pass. See the checklist in `FEATURE_REPORT.md`.
+1. The Android layers (`:app`, `:sender-app`, `:updater`) compile and their pure logic is unit-tested. Since 1.2.0 they were also smoke-tested on emulators, and the phone UI has been used on a real phone, but real TV hardware, real casting and the self-update path are still unverified. See the checklist in `FEATURE_REPORT.md`.
 2. Release APKs are signed when `keystore.properties` is configured; without a signing config they stay unsigned.
-3. minSdk 23 (TV) / 26 (phone). TLS 1.3 only on API 29+; older devices use TLS 1.2.
+3. minSdk 24 (TV, raised from 23 in 1.2.0) / 26 (phone). TLS 1.3 only on API 29+; older devices use TLS 1.2.
 4. The TV player may fetch `http://` media (cleartext allowed for media only); the control channel is always TLS.
 5. Senders pin by QR fingerprint; if the TV's Keystore key is lost, every device must re-pair.
 6. One active session ("last controller wins"). When a controlling phone disconnects, the session enters a **detached
@@ -63,11 +62,12 @@
 28. Debug builds disable the OTA auto-updater (`UpdateConfig.enabled = false`) because their `.debug` `applicationId`
     differs from release builds; OTA update verification applies to signed release builds.
 
-## UI (1.1.0)
-- The Material 3 / TV Material redesign compiles, builds (debug + release) and passes the unit tests, but has **not been looked at on a real phone or TV** yet: colours, spacing and D-pad focus order need a visual pass (see checklist items 29-33).
-- Wallpaper (dynamic) colour needs Android 12+; older phones get the seeded palettes only. The TV app has a single fixed colour scheme.
+## UI (1.1.0+)
+- The phone UI has been looked at on a real phone by the owner (1.2.x); the **TV UI has only been checked on an Android TV emulator**, not yet on real TV hardware (D-pad focus order and spacing at 3 m still need a visual pass; see checklist items 29-33).
+- Wallpaper (dynamic) colour needs Android 12+; older phones get the Expressive baseline and the seeded palettes only. The TV app has a single fixed colour scheme.
 - The seeded palettes are generated in CIE L*C*h, not Google's HCT, so they follow Material 3's tone rules (and are contrast-tested) but are not identical to Material You colours for the same seed.
-- TV Material (`androidx.tv:tv-material` 1.0.0) is still marked experimental by Google; the build opts in to `ExperimentalTvMaterial3Api`.
+- TV Material (`androidx.tv:tv-material` 1.1.0) still marks parts of its API experimental; the build opts in to `ExperimentalTvMaterial3Api`.
+- *Pure black (OLED)* only applies in dark mode; the system splash background (a fixed dark grey in `values-night`) is not pure black.
 
 ## 1.2.0 (Material 3 Expressive + toolchain upgrade)
 - Tested on **emulators only**: a Pixel 8 virtual device (API 36) for the phone app (splash, Home, Appearance sheet, About, Dummy-TV remote, dark mode) and an Android TV 1080p virtual device for the receiver (splash, Home, pairing QR, Settings). **Not** exercised: QR scanning with the camera, real TV-to-phone casting, Media3 playback of real streams, or the in-place self-update.
