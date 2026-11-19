@@ -56,7 +56,7 @@ fun PairScreen(vm: AppViewModel, onClose: () -> Unit, onOpenRemote: () -> Unit =
                     Panel {
                         Icon(Icons.Filled.QrCodeScanner, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
                         Text("On the TV, open UniversalCast Receiver and choose “Pair a new device”. A QR code appears for two minutes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = { scan() }, Modifier.fillMaxWidth()) { Text("Scan QR code") }
+                        Button(onClick = { scan() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("Scan QR code") }
                         TextButton(onClick = { manualOpen = !manualOpen }, Modifier.fillMaxWidth()) { Text("Enter code manually") }
                         if (manualOpen) {
                             OutlinedTextField(manual, { manual = it }, label = { Text("ucp://pair?d=…") }, modifier = Modifier.fillMaxWidth(), maxLines = 4)
@@ -66,7 +66,7 @@ fun PairScreen(vm: AppViewModel, onClose: () -> Unit, onOpenRemote: () -> Unit =
                 }
                 PairStage.Connecting -> Panel {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        CircularProgressIndicator()
+                        LoadingIndicator()
                         Text("Connecting securely to the TV…")
                     }
                 }
@@ -78,12 +78,12 @@ fun PairScreen(vm: AppViewModel, onClose: () -> Unit, onOpenRemote: () -> Unit =
                         color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                     )
                     Text("The same six digits must appear on the TV screen. This protects against someone intercepting the pairing.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Button(onClick = { vm.codesMatch() }, Modifier.fillMaxWidth()) { Text("They match") }
+                    Button(onClick = { vm.codesMatch() }, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) { Text("They match") }
                     OutlinedButton(onClick = { vm.codesDiffer() }, Modifier.fillMaxWidth()) { Text("They are different", color = MaterialTheme.colorScheme.error) }
                 }
                 is PairStage.Waiting -> Panel {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        CircularProgressIndicator()
+                        LoadingIndicator()
                         Column {
                             Text("Waiting for approval on ${s.tvName}", style = MaterialTheme.typography.titleSmall)
                             Text("On the TV, confirm the code, choose what this phone may do, and press Approve.", color = MaterialTheme.colorScheme.onSurfaceVariant)

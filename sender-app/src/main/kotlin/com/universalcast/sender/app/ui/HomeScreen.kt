@@ -40,8 +40,15 @@ fun HomeScreen(
     Scaffold(
         modifier = Modifier.nestedScroll(scroll.nestedScrollConnection),
         topBar = {
-            LargeTopAppBar(
+            LargeFlexibleTopAppBar(
                 title = { Text("UniversalCast") },
+                subtitle = {
+                    val paired = receivers.size
+                    Text(
+                        if (paired == 0) "Cast anything to your TV"
+                        else "$paired TV${if (paired == 1) "" else "s"} paired" + if (nearby.isNotEmpty()) " · ${nearby.size} nearby" else "",
+                    )
+                },
                 scrollBehavior = scroll,
                 actions = {
                     IconButton(onClick = { appearance = true }) { Icon(Icons.Filled.Palette, "Appearance") }
@@ -70,7 +77,7 @@ fun HomeScreen(
         floatingActionButton = {
             // With no TV paired the empty state already carries the big "Pair a TV" button.
             if (receivers.isNotEmpty()) {
-                ExtendedFloatingActionButton(onClick = onPair, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Pair a TV") })
+                MediumExtendedFloatingActionButton(onClick = onPair, icon = { Icon(Icons.Filled.Add, null) }, text = { Text("Pair a TV") })
             }
         },
     ) { pad ->
@@ -137,7 +144,7 @@ fun HomeScreen(
                             "Open UniversalCast on your TV and choose “Pair a new device”, then scan the QR code it shows.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
                         )
-                        Button(onClick = onPair, Modifier.fillMaxWidth()) {
+                        Button(onClick = onPair, modifier = Modifier.fillMaxWidth(), shapes = ButtonDefaults.shapes()) {
                             Icon(Icons.Filled.QrCodeScanner, null); Spacer(Modifier.width(8.dp)); Text("Pair a TV")
                         }
                     }
@@ -152,7 +159,7 @@ fun HomeScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {
                     Row(Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.Tv, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                        ShapeBadge(Icons.Filled.Tv, MaterialShapes.Cookie9Sided)
                         Column(Modifier.weight(1f).padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(r.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -183,7 +190,7 @@ fun HomeScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
                 ) {
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        Icon(Icons.Filled.TravelExplore, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+                        ShapeBadge(Icons.Filled.TravelExplore, MaterialShapes.Flower, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer)
                         Column(Modifier.weight(1f)) {
                             Text("Cast from a website", style = MaterialTheme.typography.titleSmall)
                             Text("Play a video in the browser, cast what it plays.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)

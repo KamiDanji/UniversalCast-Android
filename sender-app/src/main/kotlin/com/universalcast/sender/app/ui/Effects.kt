@@ -20,6 +20,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.material3.MaterialShapes
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.toPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,7 +56,11 @@ fun SplashOverlay(onDone: () -> Unit) {
     val wave by waves.animateFloat(0f, 1f, infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "wave")
     var finished by remember { mutableStateOf(false) }
     fun finish() { if (!finished) { finished = true; onDone() } }
+    val morph = remember { Morph(MaterialShapes.SoftBurst, MaterialShapes.Cookie9Sided) }
+    val shapeProgress = remember { Animatable(0f) }
+    val spin by waves.animateFloat(0f, 360f, infiniteRepeatable(tween(7000, easing = LinearEasing)), label = "spin")
     LaunchedEffect(Unit) {
+        launch { shapeProgress.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessVeryLow)) }
         launch { logo.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 180f)) }
         delay(180)
         title.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
@@ -77,7 +86,17 @@ fun SplashOverlay(onDone: () -> Unit) {
                         radius = size.minDimension * (0.30f + 0.20f * t), center = c, style = Stroke(width = 2.5.dp.toPx()),
                     )
                 }
-                drawCircle(scheme.primaryContainer, radius = size.minDimension * 0.30f * l, center = c)
+                // Material 3 Expressive shape morph (burst -> cookie), slowly rotating behind the glyph.
+                val box = size.minDimension * 0.66f * l
+                val path = morph.toPath(progress = shapeProgress.value).asComposePath()
+                val b = path.getBounds()
+                val fit = box / maxOf(b.width, b.height, 0.0001f)
+                withTransform({
+                    translate(c.x, c.y)
+                    rotate(spin, pivot = Offset.Zero)
+                    scale(fit, fit, pivot = Offset.Zero)
+                    translate(-b.center.x, -b.center.y)
+                }) { drawPath(path, scheme.primaryContainer) }
                 // Glyph: screen with a play cut-out and a stand.
                 val w = size.minDimension * 0.30f * l
                 val h = w * 0.68f

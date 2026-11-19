@@ -77,7 +77,7 @@ Use debug builds (`com.universalcast.receiver.debug`, `com.universalcast.sender.
 27. Home `⋮ → About UniversalCast`: verify stats; tap the **Version** card 5 times to unlock and open **Dummy TV Simulator**; verify touchpad, D-pad, keyboard, tracks, queue, and scale controls respond in the simulator banner.
 28. On a signed release build older than the latest GitHub release: trigger *Check for updates*, verify release notes render formatted Markdown (headings, bullets, bold, inline code), and complete the OTA APK install.
 
-**Material 3 / TV Material redesign (1.1.0) — none of this has been run on a device yet**
+**Material 3 Expressive / TV Material redesign (1.1.0 → 1.2.0) — checked on emulators only, not on real hardware**
 29. Phone, Android 12+: Home → palette icon → *Appearance*: *Wallpaper* follows the wallpaper (change wallpaper, reopen: colours change); Ocean/Violet/Lagoon/Forest/Rose/Sunset recolour the whole app; Light/Dark/System switch immediately and system-bar icons stay readable. On Android 8–11 *Wallpaper* is not offered.
 30. Phone cold start: system splash (logo on neutral background) hands over to the animated splash in the active theme colours; tapping the splash skips it. Themed launcher icon appears on Android 13+ when "Themed icons" is on.
 31. Phone *Pair a TV*: the QR scanner opens immediately; backing out shows Scan / Enter code manually; after pairing, *Connect & open remote* lands on the remote. Tapping a TV card (or a "Found nearby" card) connects / opens the scanner in one tap.

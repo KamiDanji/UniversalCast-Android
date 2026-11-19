@@ -1,4 +1,4 @@
-# UniversalCast Receiver (Android TV) — v1.1.0
+# UniversalCast Receiver (Android TV) — v1.2.0
 
 Secure Android TV receiver and companion phone sender for the **UniversalCast Protocol (UCP) 1.0**. A paired sender (phone, tablet, PC…)
 discovers the TV via mDNS, connects over pinned TLS WebSocket, authenticates with a signed challenge and then
@@ -27,8 +27,8 @@ What still needs a device is listed in `reports/FEATURE_REPORT.md` with a manual
 
 ## Layout
 - `core/` – pure JVM Kotlin library (no Android or Media3 types) plus `cli.UniversalCastCli` desktop sender.
-- `app/` – Android TV application (Jetpack Compose UI on **TV Material 3** (`androidx.tv:tv-material`), Media3, Android Keystore, NSD, optional Accessibility remote service).
-- `sender-app/` – Android phone application (Jetpack Compose UI on **Material 3** with dynamic colour, QR scanner, hardened WebView browser, lock-screen `MediaSession`, local `content://` streaming).
+- `app/` – Android TV application (Jetpack Compose UI on **TV Material 3** (`androidx.tv:tv-material` 1.1.0), Media3, Android Keystore, NSD, optional Accessibility remote service).
+- `sender-app/` – Android phone application (Jetpack Compose UI on **Material 3 Expressive** with dynamic colour, QR scanner, hardened WebView browser, lock-screen `MediaSession`, local `content://` streaming).
 - `updater/` – Android library module for GitHub Releases OTA updates and Markdown release-note rendering.
 - `reports/` – `FEATURE_REPORT.md`, `TEST_REPORT.md`, `SECURITY_VERIFICATION.md`, `KNOWN_LIMITATIONS.md`.
 - Root docs – `README.md`, `BUILD.md`, `SECURITY.md`, `ARCHITECTURE.md`.

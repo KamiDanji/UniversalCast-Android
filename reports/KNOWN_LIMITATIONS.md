@@ -68,3 +68,9 @@
 - Wallpaper (dynamic) colour needs Android 12+; older phones get the seeded palettes only. The TV app has a single fixed colour scheme.
 - The seeded palettes are generated in CIE L*C*h, not Google's HCT, so they follow Material 3's tone rules (and are contrast-tested) but are not identical to Material You colours for the same seed.
 - TV Material (`androidx.tv:tv-material` 1.0.0) is still marked experimental by Google; the build opts in to `ExperimentalTvMaterial3Api`.
+
+## 1.2.0 (Material 3 Expressive + toolchain upgrade)
+- Tested on **emulators only**: a Pixel 8 virtual device (API 36) for the phone app (splash, Home, Appearance sheet, About, Dummy-TV remote, dark mode) and an Android TV 1080p virtual device for the receiver (splash, Home, pairing QR, Settings). **Not** exercised: QR scanning with the camera, real TV-to-phone casting, Media3 playback of real streams, or the in-place self-update.
+- The TV app's minimum Android version is now **7.0 (API 24)** because current Compose requires it (was 6.0).
+- Media3 stays at 1.3.1 on purpose (the subtitle-offset renderer proxy depends on its internals); upgrading it is a separate task.
+- Material 3 Expressive on the phone covers the theme, motion, header, shape badges, loading/progress indicators, buttons and the splash; the rest of the screens use standard Material 3 components that pick up the expressive theme automatically.

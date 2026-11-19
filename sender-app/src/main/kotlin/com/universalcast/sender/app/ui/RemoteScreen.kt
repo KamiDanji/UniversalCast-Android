@@ -100,7 +100,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
             if (st.phase == ConnectionPhase.CONNECTING || st.phase == ConnectionPhase.RECONNECTING) {
                 Panel {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 3.dp)
+                        LoadingIndicator(Modifier.size(36.dp))
                         Text(st.message ?: "Connecting securely…", color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
@@ -230,14 +230,17 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                     IconButton(onClick = { c.queuePrevious() }, enabled = st.canControl && snap.queueIndex > 0) { Icon(Icons.Filled.SkipPrevious, "Previous") }
                                 }
                                 FilledTonalIconButton(
+                                    shapes = IconButtonDefaults.shapes(),
                                     onClick = { c.seek((st.estimatedPositionMs(System.currentTimeMillis()) - 10_000).coerceAtLeast(0)) },
                                     enabled = hasMedia, modifier = Modifier.size(52.dp),
                                 ) { Icon(Icons.Filled.Replay10, "Back 10 seconds") }
                                 FilledIconButton(
                                     onClick = { if (playing) c.pause() else if (snap.status == PlaybackStatus.PAUSED) c.resume() else c.play() },
+                                    shapes = IconButtonDefaults.shapes(),
                                     enabled = hasMedia, modifier = Modifier.size(72.dp),
                                 ) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "Pause" else "Play", Modifier.size(36.dp)) }
                                 FilledTonalIconButton(
+                                    shapes = IconButtonDefaults.shapes(),
                                     onClick = { c.seek(st.estimatedPositionMs(System.currentTimeMillis()) + 10_000) },
                                     enabled = hasMedia, modifier = Modifier.size(52.dp),
                                 ) { Icon(Icons.Filled.Forward10, "Forward 10 seconds") }
@@ -520,7 +523,7 @@ fun RemoteScreen(vm: AppViewModel, onClose: () -> Unit, onPairAgain: () -> Unit,
                                         val durText = entry.durationMs?.takeIf { it > 0 }?.let { " / ${formatTime(it)}" }.orEmpty()
                                         Text("Left off at ${formatTime(entry.lastPositionMs)}$durText", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                                         if (entry.progressFraction > 0f) {
-                                            LinearProgressIndicator(progress = { entry.progressFraction }, modifier = Modifier.fillMaxWidth())
+                                            LinearWavyProgressIndicator(progress = { entry.progressFraction }, modifier = Modifier.fillMaxWidth())
                                         }
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

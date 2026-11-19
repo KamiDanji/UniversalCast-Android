@@ -25,9 +25,10 @@ import kotlin.math.pow
 
 enum class ThemeMode(val label: String) { SYSTEM("System"), LIGHT("Light"), DARK("Dark") }
 
-/** [hue] is the CIE-LCh hue of the seed; null = Material You colours taken from the wallpaper (Android 12+). */
+/** [hue] is the CIE-LCh hue of the seed; null = a built-in scheme (DYNAMIC = wallpaper colours on Android 12+, EXPRESSIVE = Material 3 Expressive baseline). */
 enum class ColorTheme(val label: String, val hue: Float?, val swatch: Color) {
     DYNAMIC("Wallpaper", null, Color(0xFF8E9AAF)),
+    EXPRESSIVE("Expressive", null, Color(0xFF8A56D8)),
     OCEAN("Ocean", 282f, Color(0xFF4A6FE0)),
     VIOLET("Violet", 312f, Color(0xFF8B5CD6)),
     LAGOON("Lagoon", 205f, Color(0xFF1F9AA8)),
@@ -41,8 +42,8 @@ class ThemePrefs private constructor(ctx: Context) {
     private val prefs = ctx.applicationContext.getSharedPreferences("universalcast_ui", Context.MODE_PRIVATE)
     private val _mode = MutableStateFlow(read("mode", ThemeMode.SYSTEM))
     private val _color = MutableStateFlow(
-        read("color", if (Build.VERSION.SDK_INT >= 31) ColorTheme.DYNAMIC else ColorTheme.OCEAN)
-            .let { if (it == ColorTheme.DYNAMIC && Build.VERSION.SDK_INT < 31) ColorTheme.OCEAN else it },
+        read("color", if (Build.VERSION.SDK_INT >= 31) ColorTheme.DYNAMIC else ColorTheme.EXPRESSIVE)
+            .let { if (it == ColorTheme.DYNAMIC && Build.VERSION.SDK_INT < 31) ColorTheme.EXPRESSIVE else it },
     )
     val mode: StateFlow<ThemeMode> = _mode
     val color: StateFlow<ColorTheme> = _color
@@ -152,6 +153,7 @@ fun SenderTheme(content: @Composable () -> Unit) {
     val scheme = when {
         colorTheme == ColorTheme.DYNAMIC && Build.VERSION.SDK_INT >= 31 ->
             if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
+        colorTheme == ColorTheme.EXPRESSIVE -> if (dark) darkColorScheme() else expressiveLightColorScheme()
         else -> remember(colorTheme, dark) { schemeFromSeed((colorTheme.hue ?: ColorTheme.OCEAN.hue!!), dark) }
     }
 
@@ -166,7 +168,7 @@ fun SenderTheme(content: @Composable () -> Unit) {
     }
 
     CompositionLocalProvider(LocalStatusColors provides if (dark) DarkStatus else LightStatus) {
-        MaterialTheme(colorScheme = scheme, content = content)
+        MaterialExpressiveTheme(colorScheme = scheme, motionScheme = MotionScheme.expressive(), content = content)
     }
 }
 
@@ -182,10 +184,25 @@ fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> 
     Card(
         modifier.fillMaxWidth().reveal().animateContentSize(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.extraLarge,
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
+}
+
+/** Icon on a tonal Material 3 Expressive shape (cookie / flower / burst …) used to mark cards. */
+@Composable
+fun ShapeBadge(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    shape: androidx.graphics.shapes.RoundedPolygon = MaterialShapes.Cookie9Sided,
+    container: Color = MaterialTheme.colorScheme.primaryContainer,
+    content: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier.size(52.dp).background(container, shape.toShape()),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, null, tint = content, modifier = Modifier.size(26.dp)) }
 }
 
 /** Small tonal status label (optionally with a pulsing dot for something live). */

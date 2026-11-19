@@ -62,7 +62,10 @@ fun AppearanceSheet(onDismiss: () -> Unit) {
 private fun Swatch(theme: ColorTheme, selected: Boolean, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val dark = isSystemInDarkTheme()
-    val fill: Brush = if (theme == ColorTheme.DYNAMIC && Build.VERSION.SDK_INT >= 31) {
+    val fill: Brush = if (theme == ColorTheme.EXPRESSIVE) {
+        val s = if (dark) darkColorScheme() else expressiveLightColorScheme()
+        Brush.linearGradient(listOf(s.primary, s.tertiary))
+    } else if (theme == ColorTheme.DYNAMIC && Build.VERSION.SDK_INT >= 31) {
         val s = if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         Brush.linearGradient(listOf(s.primary, s.tertiary))
     } else Brush.linearGradient(listOf(theme.swatch, theme.swatch))

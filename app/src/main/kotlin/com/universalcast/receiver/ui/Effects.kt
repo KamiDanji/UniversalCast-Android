@@ -19,6 +19,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.asComposePath
+import androidx.graphics.shapes.CornerRounding
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.RoundedPolygon
+import androidx.graphics.shapes.star
+import androidx.graphics.shapes.toPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.text.font.FontWeight
@@ -68,7 +75,17 @@ fun SplashOverlay(onDone: () -> Unit) {
     var finished by remember { mutableStateOf(false) }
     fun finish() { if (!finished) { finished = true; onDone() } }
     val focus = remember { FocusRequester() }
+    // Expressive-style shape morph (rounded 12-point burst -> softer 9-point cookie), slowly rotating behind the glyph.
+    val morph = remember {
+        Morph(
+            RoundedPolygon.star(12, innerRadius = 0.72f, rounding = CornerRounding(0.18f), innerRounding = CornerRounding(0.18f)),
+            RoundedPolygon.star(9, innerRadius = 0.88f, rounding = CornerRounding(0.4f), innerRounding = CornerRounding(0.4f)),
+        )
+    }
+    val shapeProgress = remember { Animatable(0f) }
+    val spin by waves.animateFloat(0f, 360f, infiniteRepeatable(tween(8000, easing = LinearEasing)), label = "spin")
     LaunchedEffect(Unit) {
+        launch { shapeProgress.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessVeryLow)) }
         runCatching { focus.requestFocus() }
         launch { logo.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 160f)) }
         delay(200)
@@ -96,7 +113,16 @@ fun SplashOverlay(onDone: () -> Unit) {
                         radius = size.minDimension * (0.30f + 0.20f * t), center = c, style = Stroke(width = 3.dp.toPx()),
                     )
                 }
-                drawCircle(cs.primaryContainer, radius = size.minDimension * 0.30f * l, center = c)
+                val box = size.minDimension * 0.66f * l
+                val path = morph.toPath(progress = shapeProgress.value).asComposePath()
+                val b = path.getBounds()
+                val fit = box / maxOf(b.width, b.height, 0.0001f)
+                withTransform({
+                    translate(c.x, c.y)
+                    rotate(spin, pivot = Offset.Zero)
+                    scale(fit, fit, pivot = Offset.Zero)
+                    translate(-b.center.x, -b.center.y)
+                }) { drawPath(path, cs.primaryContainer) }
                 val w = size.minDimension * 0.30f * l
                 val h = w * 0.68f
                 val top = Offset(c.x - w / 2, c.y - h / 2 - 7.dp.toPx() * l)
