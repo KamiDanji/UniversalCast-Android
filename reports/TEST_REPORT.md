@@ -1,6 +1,6 @@
 # Test report
 
-Verified at version **1.2.0** (`versionCode=14`).
+Verified at version **1.2.1** (`versionCode=15`).
 
 Command (Windows, JDK 17, Gradle 8.7, `--rerun-tasks`):
 `.\gradlew.bat :core:test :app:testDebugUnitTest :sender-app:testDebugUnitTest :updater:testDebugUnitTest --rerun-tasks`

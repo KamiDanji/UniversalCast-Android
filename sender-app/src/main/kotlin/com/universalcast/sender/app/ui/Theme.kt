@@ -47,6 +47,9 @@ class ThemePrefs private constructor(ctx: Context) {
     )
     val mode: StateFlow<ThemeMode> = _mode
     val color: StateFlow<ColorTheme> = _color
+    private val _pureBlack = MutableStateFlow(prefs.getBoolean("pure_black", false))
+    val pureBlack: StateFlow<Boolean> = _pureBlack
+    fun setPureBlack(v: Boolean) { _pureBlack.value = v; prefs.edit().putBoolean("pure_black", v).apply() }
 
     fun setMode(m: ThemeMode) { _mode.value = m; prefs.edit().putString("mode", m.name).apply() }
     fun setColor(c: ColorTheme) { _color.value = c; prefs.edit().putString("color", c.name).apply() }
@@ -137,6 +140,20 @@ private fun labToRgb(l: Float, a: Float, b: Float): Color? {
     return Color(gamma(r.coerceIn(0.0, 1.0)).toFloat(), gamma(g.coerceIn(0.0, 1.0)).toFloat(), gamma(bl.coerceIn(0.0, 1.0)).toFloat())
 }
 
+/**
+ * OLED mode: true-black background and base surfaces (pixels off), with the raised container surfaces kept a
+ * little lighter than black so cards stay distinguishable. All accent colours are untouched.
+ */
+fun ColorScheme.toPureBlack(): ColorScheme {
+    fun lift(c: Color, amount: Float) = androidx.compose.ui.graphics.lerp(Color.Black, c, amount)
+    return copy(
+        background = Color.Black, surface = Color.Black, surfaceDim = Color.Black, surfaceContainerLowest = Color.Black,
+        surfaceContainerLow = lift(surfaceContainerLow, 0.5f), surfaceContainer = lift(surfaceContainer, 0.6f),
+        surfaceContainerHigh = lift(surfaceContainerHigh, 0.7f), surfaceContainerHighest = lift(surfaceContainerHighest, 0.8f),
+        surfaceBright = lift(surfaceBright, 0.8f), surfaceVariant = lift(surfaceVariant, 0.7f),
+    )
+}
+
 // ---- theme ------------------------------------------------------------------------------------------------------
 
 @Composable
@@ -145,17 +162,20 @@ fun SenderTheme(content: @Composable () -> Unit) {
     val prefs = remember { ThemePrefs.get(ctx) }
     val mode by prefs.mode.collectAsState()
     val colorTheme by prefs.color.collectAsState()
+    val pureBlack by prefs.pureBlack.collectAsState()
     val dark = when (mode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    val scheme = when {
+    val baseScheme = when {
         colorTheme == ColorTheme.DYNAMIC && Build.VERSION.SDK_INT >= 31 ->
             if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         colorTheme == ColorTheme.EXPRESSIVE -> if (dark) darkColorScheme() else expressiveLightColorScheme()
         else -> remember(colorTheme, dark) { schemeFromSeed((colorTheme.hue ?: ColorTheme.OCEAN.hue!!), dark) }
     }
+
+    val scheme = if (dark && pureBlack) baseScheme.toPureBlack() else baseScheme
 
     // Edge-to-edge with system-bar icons that follow the chosen (not the system) mode.
     val activity = ctx as? ComponentActivity

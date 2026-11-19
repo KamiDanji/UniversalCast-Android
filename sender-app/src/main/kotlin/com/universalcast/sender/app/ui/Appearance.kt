@@ -48,6 +48,14 @@ fun AppearanceSheet(onDismiss: () -> Unit) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 for (t in options) Swatch(t, selected = color == t) { prefs.setColor(t) }
             }
+            val pureBlack by prefs.pureBlack.collectAsState()
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Pure black (OLED)", style = MaterialTheme.typography.titleSmall)
+                    Text("True black background in dark mode. Saves battery on OLED screens.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = pureBlack, onCheckedChange = { prefs.setPureBlack(it) })
+            }
             if (Build.VERSION.SDK_INT >= 31) {
                 Text(
                     "“Wallpaper” follows the colours of your Android wallpaper and changes with it.",
