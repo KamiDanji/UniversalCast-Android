@@ -24,8 +24,7 @@
         </intent>
     </queries>
 
-    <uses-feature android:name="android.software.leanback" android:required="false" />
-    <uses-feature android:name="android.hardware.type.automotive" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
 
@@ -45,22 +44,14 @@
              sender asks the TV to play). The receiver's own control endpoint is TLS-only and cannot be configured
              otherwise (ConfigValidator). -->
 
-        <meta-data
-            android:name="com.android.automotive"
-            android:resource="@xml/automotive_app_desc" />
-        <meta-data
-            android:name="com.google.android.gms.car.application"
-            android:resource="@xml/automotive_app_desc" />
-
         <activity
             android:name=".ui.MainActivity"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
-            android:screenOrientation="sensorLandscape">
+            android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>

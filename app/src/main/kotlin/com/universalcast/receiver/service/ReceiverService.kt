@@ -7,9 +7,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.media.MediaMetadata
-import android.media.session.MediaSession
-import android.media.session.PlaybackState
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.wifi.WifiManager
@@ -20,9 +17,6 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
-import com.universalcast.playback.PlaybackListener
-import com.universalcast.playback.PlaybackSnapshot
-import com.universalcast.playback.PlaybackStatus
 import com.universalcast.receiver.R
 import com.universalcast.receiver.UniversalCastApp
 import com.universalcast.receiver.policy.AutoLaunchDecision
@@ -46,9 +40,7 @@ class ReceiverService : Service() {
     private var wake: PowerManager.WakeLock? = null
     private var callback: ConnectivityManager.NetworkCallback? = null
     private var anchor: OverlayAnchor? = null
-    private var mediaSession: MediaSession? = null
     private var lastLaunchAtMs: Long? = null
-    private val playbackListener = PlaybackListener { snap -> main.post { updateMediaSession(snap) } }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -62,83 +54,11 @@ class ReceiverService : Service() {
             return START_NOT_STICKY
         }
         acquireLocks()
-        ensureMediaSession()
-        runtime.engine.removeListener(playbackListener)
-        runtime.engine.addListener(playbackListener)
-        updateMediaSession(runtime.playback.value)
         runtime.startReceiver()
         registerNetworkCallback()
         (anchor ?: OverlayAnchor(this, runtime.log).also { anchor = it }).sync()
         runtime.onCastStarted = { main.post { onCastStarted() } }
         return START_STICKY
-    }
-
-    /**
-     * Exposes an Android [MediaSession] on the receiver so steering-wheel buttons on Android Car Head Units /
-     * Android Automotive OS (and Bluetooth remotes on TVs) can play, pause, seek and skip tracks.
-     */
-    private fun ensureMediaSession() {
-        if (mediaSession != null) return
-        val session = MediaSession(this, "UniversalCastReceiver")
-        session.setCallback(object : MediaSession.Callback() {
-            override fun onPlay() {
-                if (runtime.playback.value.status == PlaybackStatus.PAUSED) runtime.engine.resume() else runtime.engine.play()
-            }
-
-            override fun onPause() = runtime.engine.pause()
-            override fun onStop() = runtime.engine.stop()
-            override fun onSeekTo(pos: Long) = runtime.engine.seekTo(pos.coerceAtLeast(0L))
-            override fun onFastForward() = runtime.engine.seekTo(runtime.playback.value.positionMs + 10_000L)
-            override fun onRewind() = runtime.engine.seekTo((runtime.playback.value.positionMs - 10_000L).coerceAtLeast(0L))
-            override fun onSkipToNext() {
-                if (!runtime.engine.skipNext()) onFastForward()
-            }
-
-            override fun onSkipToPrevious() {
-                if (!runtime.engine.skipPrevious()) onRewind()
-            }
-        })
-        mediaSession = session
-    }
-
-    private fun updateMediaSession(snap: PlaybackSnapshot) {
-        val session = mediaSession ?: return
-        val active = snap.status != PlaybackStatus.IDLE
-        session.isActive = active
-        val pbState = when (snap.status) {
-            PlaybackStatus.IDLE -> PlaybackState.STATE_NONE
-            PlaybackStatus.PLAYING -> PlaybackState.STATE_PLAYING
-            PlaybackStatus.PAUSED, PlaybackStatus.READY -> PlaybackState.STATE_PAUSED
-            PlaybackStatus.LOADING, PlaybackStatus.BUFFERING -> PlaybackState.STATE_BUFFERING
-            PlaybackStatus.ERROR -> PlaybackState.STATE_ERROR
-            PlaybackStatus.ENDED -> PlaybackState.STATE_STOPPED
-        }
-        val actions = if (active) {
-            PlaybackState.ACTION_PLAY or
-                PlaybackState.ACTION_PAUSE or
-                PlaybackState.ACTION_PLAY_PAUSE or
-                PlaybackState.ACTION_STOP or
-                PlaybackState.ACTION_SEEK_TO or
-                PlaybackState.ACTION_FAST_FORWARD or
-                PlaybackState.ACTION_REWIND or
-                PlaybackState.ACTION_SKIP_TO_NEXT or
-                PlaybackState.ACTION_SKIP_TO_PREVIOUS
-        } else 0L
-        session.setPlaybackState(
-            PlaybackState.Builder()
-                .setState(pbState, snap.positionMs, if (snap.isPlaying) snap.speed else 0f)
-                .setActions(actions)
-                .build()
-        )
-        if (active) {
-            session.setMetadata(
-                MediaMetadata.Builder()
-                    .putString(MediaMetadata.METADATA_KEY_TITLE, snap.title ?: snap.mediaUri ?: "UniversalCast")
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, runtime.receiverName.value)
-                    .putLong(MediaMetadata.METADATA_KEY_DURATION, snap.durationMs ?: -1L)
-                    .build()
-            )
-        }
     }
 
     /** @return false if Android refused to make this a foreground service (logged, never a crash). */
@@ -235,12 +155,6 @@ class ReceiverService : Service() {
 
     override fun onDestroy() {
         runtime.onCastStarted = null
-        runCatching { runtime.engine.removeListener(playbackListener) }
-        runCatching {
-            mediaSession?.isActive = false
-            mediaSession?.release()
-            mediaSession = null
-        }
         anchor?.remove(); anchor = null
         callback?.let { runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it) } }
         callback = null

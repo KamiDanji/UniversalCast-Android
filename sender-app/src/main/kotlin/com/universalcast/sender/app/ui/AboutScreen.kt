@@ -175,7 +175,6 @@ fun AboutScreen(
                 StatRow("Developer", "Danny (KamiDanji)")
                 StatRow("Repository", "github.com/KamiDanji/UniversalCast-Android")
                 StatRow("Protocol", "UniversalCast Protocol (UCP) 1.0")
-                StatRow("Platforms", "Android TV · Car Head Units / AAOS · Android Auto Dashboard")
                 StatRow("Transport Security", "TLS 1.2 / 1.3 · SPKI SHA-256 Certificate Pinning")
                 StatRow("Authentication", "ECDSA P-256 Mutual Challenge-Response + 6-digit SAS")
             }
